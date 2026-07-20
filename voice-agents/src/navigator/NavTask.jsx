@@ -7,11 +7,14 @@ export default function NavTask() {
   const task = useStore((s) => s.tasks[id])
   const patient = useStore((s) => s.patients[task?.patientId])
   const pb = useStore((s) => (task ? s.playbooks[task.playbookId] : null))
+  const navigators = useStore((s) => s.navigators)
+  const me = useStore((s) => s.currentNavigator)
   const setView = useStore((s) => s.setView)
   const startCall = useStore((s) => s.startCall)
   const saveCapture = useStore((s) => s.saveCapture)
   const confirmCapture = useStore((s) => s.confirmCapture)
   const resolveEscalation = useStore((s) => s.resolveEscalation)
+  const reassignTask = useStore((s) => s.reassignTask)
 
   if (!task) return <div className="nav-wrap"><div className="nav-empty">Nothing selected.</div></div>
 
@@ -43,7 +46,10 @@ export default function NavTask() {
 
   return (
     <div className="nav-wrap narrow">
-      <button className="btn sm ghost" onClick={() => setView('home')} style={{ marginBottom: 16 }}>← My Work</button>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+        <button className="btn sm ghost" onClick={() => setView('home')}>← My Work</button>
+        <Handoff task={task} navigators={navigators} me={me} onReassign={(toId, note) => { reassignTask(task.id, toId, note); setView('home') }} />
+      </div>
 
       <div className="nav-patient">
         <div className="np-avatar">{patient.name.split(' ').map((x) => x[0]).join('')}</div>
@@ -167,6 +173,33 @@ function Choice({ value, onChange, options }) {
       {options.map(([v, label]) => (
         <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>{label}</button>
       ))}
+    </div>
+  )
+}
+
+function Handoff({ task, navigators, me, onReassign }) {
+  const [open, setOpen] = useState(false)
+  const currentOwner = task.assignedNavigator || me
+  const others = Object.values(navigators).filter((n) => n.id !== currentOwner)
+  const [toId, setToId] = useState(others[0]?.id || '')
+  const [note, setNote] = useState('')
+  return (
+    <div className="handoff-wrap">
+      <button className="btn sm" onClick={() => setOpen((o) => !o)}>⇄ Hand off</button>
+      {open && (
+        <div className="handoff-pop">
+          <div className="lab">Assign to a colleague</div>
+          <select className="input" value={toId} onChange={(e) => setToId(e.target.value)}>
+            {others.map((n) => <option key={n.id} value={n.id}>{n.name} · {n.role}</option>)}
+          </select>
+          <input className="input" style={{ marginTop: 8 }} placeholder="Reason (optional), e.g. covering their panel today" value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="row" style={{ marginTop: 10, gap: 8 }}>
+            <button className="btn primary sm" onClick={() => onReassign(toId, note)} disabled={!toId}>Reassign</button>
+            <button className="btn sm ghost" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+          <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>It moves to their worklist. The handoff is logged.</div>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,6 +5,7 @@
 export const NAVIGATORS = {
   sarah: { id: 'sarah', name: 'Sarah Kim, RN', role: 'Lead navigator', panel: 42 },
   miguel: { id: 'miguel', name: 'Miguel Torres, RN', role: 'Navigator', panel: 38 },
+  priya: { id: 'priya', name: 'Priya Nair, RN', role: 'Navigator', panel: 35 },
 }
 
 export const PATIENTS = {

@@ -205,6 +205,18 @@ export const useStore = create((set, get) => ({
     get().flash('Escalated to navigator (SLA: same business day)')
   },
 
+  // Navigator hands a case to a colleague. Owner changes; state is untouched; logged.
+  reassignTask: (taskId, toId, note) => {
+    const t = get().tasks[taskId]
+    const navs = get().navigators
+    const from = t.assignedNavigator || get().patients[t.patientId].navigator
+    if (toId === from) { get().flash('Already assigned to that person'); return }
+    get()._patch(taskId, { assignedNavigator: toId })
+    get()._log(taskId, t.patientId, t.state, t.state, 'navigator',
+      `Reassigned from ${navs[from]?.name || 'unassigned'} to ${navs[toId]?.name}${note ? ': "' + note + '"' : ''}`)
+    get().flash(`Handed off to ${navs[toId]?.name.split(',')[0]}`)
+  },
+
   // Navigator resolves a Track-A escalation after calling the patient back.
   resolveEscalation: (taskId, { note, scheduled }) => {
     const t = get().tasks[taskId]

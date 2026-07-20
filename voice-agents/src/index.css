@@ -307,3 +307,10 @@ table.tbl td.mono { font-family: var(--mono); color: var(--text-faint); font-siz
 .voicedot.ended { background: var(--text-dim); }
 .voicedot.error { background: var(--bad); }
 @keyframes vpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(63,185,80,.45); } 50% { box-shadow: 0 0 0 6px rgba(63,185,80,0); } }
+
+/* ================= handoff popover ================= */
+.handoff-wrap { position: relative; }
+.handoff-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 300px; z-index: 30;
+  background: var(--surface); border: 1px solid var(--border-bright); border-radius: 12px; padding: 16px;
+  box-shadow: 0 16px 44px rgba(0,0,0,.55); }
+.handoff-pop .lab { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--text-faint); margin-bottom: 10px; }
