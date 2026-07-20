@@ -1,0 +1,785 @@
+<nav class="toc" aria-label="Contents">
+  <div class="toc-label">Contents</div>
+  <a href="#s01" data-toc="s01"><span class="toc-num">01</span> The Thesis</a>
+  <a href="#s02" data-toc="s02"><span class="toc-num">02</span> Two Nouns, One Verb</a>
+  <a href="#s03" data-toc="s03"><span class="toc-num">03</span> The Five Playbooks</a>
+  <a href="#s04" data-toc="s04"><span class="toc-num">04</span> Architecture</a>
+  <a href="#s05" data-toc="s05"><span class="toc-num">05</span> The Conversation Loop</a>
+  <a href="#s06" data-toc="s06"><span class="toc-num">06</span> Task Lifecycle</a>
+  <a href="#s07" data-toc="s07"><span class="toc-num">07</span> Fallout &amp; Escalation</a>
+  <a href="#s08" data-toc="s08"><span class="toc-num">08</span> Data Model</a>
+  <a href="#s09" data-toc="s09"><span class="toc-num">09</span> Stack &amp; Why Slack</a>
+  <a href="#s10" data-toc="s10"><span class="toc-num">10</span> Build Plan &amp; Deferred</a>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">qTrack · Patient Communication · POC Plan</div>
+    <h1>Goal-Directed Patient Communication Agent</h1>
+    <div class="meta">
+      <span class="chip">2026-07-20</span>
+      <span class="chip">Status: POC design</span>
+      <span class="chip">LCS + IPN</span>
+      <span class="chip">Track A + Track B</span>
+    </div>
+    <p class="lede">
+      This POC proves one idea: a single state-machine engine can turn a clinical trigger into a
+      tracked conversation that either reaches its objective on its own, or hands off cleanly to a
+      navigator. We start on Slack because it gives us the patient side and the navigator side in one
+      tool with no telephony overhead. The channel is a swappable adapter; the brain we build now is
+      what carries straight over to voice later.
+    </p>
+  </header>
+
+  <!-- ============ 01 ============ -->
+  <section id="s01">
+    <h2><span class="num">01</span> The Thesis</h2>
+    <p>
+      The adherence gap is not a copywriting problem. It is that a trigger (a no-show, an overdue
+      follow-up, a filed finding) never reliably becomes a <b>tracked action with an owner and a goal</b>.
+      So the thing worth building is not "a bot that texts patients." It is an engine that, for each
+      condition, knows: what it is trying to achieve, what it will say to get there, how it reads the
+      reply, and what happens next whether it succeeds or fails.
+    </p>
+    <p>
+      Everything in this POC is organized around one architectural bet: <b>the channel is a detail, the
+      brain is the product.</b> Today the brain speaks over Slack. Tomorrow the exact same brain speaks
+      over a voice line. Nothing about the trigger logic, the state machine, the goal definitions, or the
+      escalation flow changes when we swap the mouth.
+    </p>
+    <div class="callout">
+      <div class="tag">What "done" means for the POC</div>
+      A clinical condition on a seeded patient fires a trigger, the agent opens a Slack conversation with
+      a stated goal (for example, capture a follow-up appointment date), it interprets the reply, it either
+      records success and schedules the next task or escalates an off-script reply to a navigator, and every
+      step of that is written to a durable, per-patient, replayable log.
+    </div>
+    <div class="grid-shift">
+      <div class="shift-row">
+        <div class="from">One monolithic "chatbot"</div>
+        <div class="arrow">→</div>
+        <div class="to">Per-condition playbooks over a shared engine</div>
+      </div>
+      <div class="shift-row">
+        <div class="from">Channel hardcoded (voice)</div>
+        <div class="arrow">→</div>
+        <div class="to">Channel is a pluggable adapter (Slack now, voice later)</div>
+      </div>
+      <div class="shift-row">
+        <div class="from">"Send a message and hope"</div>
+        <div class="arrow">→</div>
+        <div class="to">Goal-directed turn: interpret reply against an objective</div>
+      </div>
+      <div class="shift-row">
+        <div class="from">Outcome lives in a navigator's memory</div>
+        <div class="arrow">→</div>
+        <div class="to">Every transition timestamped in an event log</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 ============ -->
+  <section id="s02">
+    <h2><span class="num">02</span> Two Nouns, One Verb</h2>
+    <p>
+      The entire model is small enough to hold in your head. There are two data objects and one function
+      that does all the work.
+    </p>
+    <h3>Playbook (the condition)</h3>
+    <p>
+      A versioned config object, one per condition. It is the "state machine definition." It never runs; it
+      describes how a task of this type behaves. This is where a clinical or ops person, not an engineer,
+      eventually edits behaviour.
+    </p>
+    <table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>trigger</code></td><td>The condition that mints a task: an event, or a derived "overdue by N days" scan predicate.</td></tr>
+        <tr><td><code>automation_tier</code></td><td><code>automatic</code> or <code>assisted</code>. Decided by interaction type, not by importance.</td></tr>
+        <tr><td><code>goal</code></td><td>The achievable outcome the agent is chasing, for example capture a date, elicit interest, confirm attendance.</td></tr>
+        <tr><td><code>expected_outcomes[]</code></td><td>The closed set of structured replies that count as "matched," for example confirmed, reschedule, declined.</td></tr>
+        <tr><td><code>barrier_signals[]</code></td><td>Reply patterns that force immediate escalation even inside a matched reply (cost, fear, "why do I need this").</td></tr>
+        <tr><td><code>script</code></td><td>The prompt or template the LLM uses to compose each turn, plus the acknowledge-and-handoff script for fallout.</td></tr>
+        <tr><td><code>transitions</code></td><td>State to state rules: on this outcome, go to that state.</td></tr>
+        <tr><td><code>retry_policy</code></td><td>Max attempts, wait interval, and the channel-escalation ladder (attempt 1 preferred channel, attempt 2 a different one).</td></tr>
+        <tr><td><code>next_task</code></td><td>What to spawn on success, for example on date captured, create a pre-scan reminder at T-48h.</td></tr>
+      </tbody>
+    </table>
+    <h3>Task (the running instance)</h3>
+    <p>
+      One task is one playbook running for one patient. It <b>is</b> the state machine instance. It carries
+      the live context, the current state, the attempt count, and the outcome. It is the object every log
+      row points back to. Its field set follows the PRD's Patient Communication Task (see section 08).
+    </p>
+    <h3>advance(task, event)</h3>
+    <p>
+      The one verb. The executor calls it whenever something happens to a task: a timer fires, or a reply
+      arrives. It looks up the task's playbook, decides the next state, and along the way invokes the LLM
+      brain (to compose or to interpret) and the channel adapter (to send). Every call writes a row to the
+      event log. That is the whole runtime.
+    </p>
+    <div class="callout">
+      <div class="tag">Why this shape</div>
+      Adding a sixth condition later is writing one more Playbook config, not touching the engine. Swapping
+      Slack for voice is writing one more adapter, not touching the playbooks. The state machine is the part
+      that stays constant, so it is the part we invest in now.
+    </div>
+  </section>
+
+  <!-- ============ 03 ============ -->
+  <section id="s03">
+    <h2><span class="num">03</span> The Five Playbooks</h2>
+    <p>
+      Five conditions for the POC, drawn straight from the build-spec: four automatic (binary or logistical
+      interactions) and one assisted (an open clinical conversation). Each is a state machine with an explicit
+      goal and an explicit next step.
+    </p>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Condition</th><th>Tier</th><th>Agent's goal</th><th>Success outcome</th><th>Next task on success</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td><td>LCS eligibility outreach</td>
+          <td><span class="badge b-ok">auto</span></td>
+          <td>Elicit interest in a free annual scan</td>
+          <td><code>interested</code></td>
+          <td>Enrollment / schedule-SDM task</td>
+        </tr>
+        <tr>
+          <td>2</td><td>No-show / overdue chase (LCS + IPN)</td>
+          <td><span class="badge b-ok">auto</span></td>
+          <td>Capture a concrete (re)schedule date</td>
+          <td><code>reschedule + date</code></td>
+          <td>Pre-scan reminder at T-48h</td>
+        </tr>
+        <tr>
+          <td>3</td><td>Pre-scan instructions / reminder</td>
+          <td><span class="badge b-ok">auto</span></td>
+          <td>Confirm attendance, acknowledge prep</td>
+          <td><code>confirmed</code></td>
+          <td>None (or post-scan follow-up)</td>
+        </tr>
+        <tr>
+          <td>4</td><td>General appointment reminder</td>
+          <td><span class="badge b-ok">auto</span></td>
+          <td>Confirm attendance for any visit type</td>
+          <td><code>confirmed</code></td>
+          <td>None</td>
+        </tr>
+        <tr>
+          <td>5</td><td>New finding (Lung-RADS 3/4A or IPN surveillance)</td>
+          <td><span class="badge b-warn">assisted</span></td>
+          <td>Prep a navigator, capture a structured call outcome</td>
+          <td><code>capture_complete</code></td>
+          <td>Continued-surveillance follow-up task</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <div class="tag">Note on 3 vs 4</div>
+      Playbooks 3 and 4 are the same trigger-decision-delivery mechanics with a different content parameter
+      (prep instructions vs generic confirmation). Build them as one capability with a content-type switch,
+      not two code paths. They are listed separately only because that is how they were scoped.
+    </div>
+    <p>
+      The line that decides tier is not "how serious is this." It is <b>can the useful reply be
+      anticipated.</b> "Does Tuesday at 2pm work" has a closed answer set, so it is automatic. "Is this
+      serious, what does it mean" cannot be scripted, so it is assisted no matter how routine the underlying
+      risk is. Playbook 5 is the only one where the answer is open, which is exactly why the agent's job there
+      is prep and capture, not conversation.
+    </p>
+  </section>
+
+  <!-- ============ 04 ============ -->
+  <section id="s04">
+    <h2><span class="num">04</span> Architecture</h2>
+    <p>
+      The external world sits on the left: EMR/RIS events and a nightly clock feed triggers in, and the
+      patient and navigator both live on Slack. Everything in the container is what we build. The dashed
+      region is the deliberate seam: the channel adapter is where Slack lives today and voice lives later,
+      and nothing on its left cares which one is plugged in.
+    </p>
+    <figure class="diagram">
+      <svg viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture: triggers and Slack actors around a communication engine container">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a8a"/></marker>
+          <marker id="arr-bright" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff"/></marker>
+        </defs>
+
+        <!-- LEFT actors -->
+        <g font-family="SF Mono,monospace" font-size="11" fill="#cfcfcf">
+          <rect x="14" y="34"  width="120" height="38" rx="7" fill="#111" stroke="#3a3a3a"/><text x="74" y="57"  text-anchor="middle">EMR / RIS event</text>
+          <rect x="14" y="86"  width="120" height="38" rx="7" fill="#111" stroke="#3a3a3a"/><text x="74" y="109" text-anchor="middle">Nightly scan clock</text>
+          <rect x="14" y="286" width="120" height="38" rx="7" fill="#1c1c1c" stroke="#fff" stroke-width="1.4"/><text x="74" y="309" text-anchor="middle" fill="#fff">Patient (Slack)</text>
+          <rect x="14" y="338" width="120" height="38" rx="7" fill="#1c1c1c" stroke="#fff" stroke-width="1.4"/><text x="74" y="361" text-anchor="middle" fill="#fff">Navigator (Slack)</text>
+        </g>
+
+        <!-- arrows in -->
+        <g stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+          <path d="M134,53  C165,53 165,86 196,86"/>
+          <path d="M134,105 C165,105 165,96 196,96"/>
+        </g>
+
+        <!-- CONTAINER -->
+        <rect x="196" y="20" width="508" height="360" rx="12" fill="#0a0a0a" stroke="#3a3a3a"/>
+        <text x="214" y="42" font-family="SF Mono,monospace" font-size="10" letter-spacing="2.4" fill="#5c5c5c">PATIENT COMMUNICATION ENGINE</text>
+
+        <!-- internal boxes -->
+        <g font-family="SF Mono,monospace" font-size="11" fill="#cfcfcf">
+          <rect x="214" y="66"  width="150" height="40" rx="7" fill="#111" stroke="#3a3a3a"/><text x="289" y="90"  text-anchor="middle">Trigger engine</text>
+          <rect x="214" y="118" width="150" height="40" rx="7" fill="#111" stroke="#3a3a3a"/><text x="289" y="142" text-anchor="middle">Playbook registry</text>
+
+          <rect x="392" y="92"  width="150" height="46" rx="7" fill="#1c1c1c" stroke="#fff" stroke-width="1.5"/><text x="467" y="120" text-anchor="middle" fill="#fff">State executor</text>
+          <rect x="392" y="158" width="150" height="40" rx="7" fill="#111" stroke="#3a3a3a"/><text x="467" y="182" text-anchor="middle">LLM brain (Claude)</text>
+
+          <rect x="214" y="212" width="150" height="72" rx="7" fill="#050505" stroke="#3a3a3a"/>
+          <text x="289" y="234" text-anchor="middle" fill="#8f8f8f">Task store</text>
+          <text x="289" y="252" text-anchor="middle" fill="#8f8f8f">Event log</text>
+          <text x="289" y="270" text-anchor="middle" fill="#8f8f8f">Comm log</text>
+        </g>
+
+        <!-- dashed channel adapter region -->
+        <rect x="560" y="66" width="128" height="292" rx="10" fill="#050505" stroke="#cfcfcf" stroke-dasharray="5,4"/>
+        <text x="574" y="88" font-family="SF Mono,monospace" font-size="9" letter-spacing="2" fill="#cfcfcf">CHANNEL ADAPTER</text>
+        <g font-family="SF Mono,monospace" font-size="11" fill="#ededed">
+          <rect x="574" y="104" width="100" height="40" rx="7" fill="#1c1c1c" stroke="#6a6a6a"/><text x="624" y="128" text-anchor="middle" fill="#fff">Slack (now)</text>
+          <rect x="574" y="156" width="100" height="40" rx="7" fill="#0d0d0d" stroke="#2a2a2a"/><text x="624" y="180" text-anchor="middle" fill="#8a8a8a">Voice (later)</text>
+        </g>
+
+        <!-- internal arrows -->
+        <g stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+          <path d="M364,86  C378,86 378,110 390,110"/>
+          <path d="M364,138 C378,138 378,116 390,120"/>
+          <path d="M467,138 L467,156"/>
+          <path d="M392,124 C378,150 320,190 300,210"/>
+        </g>
+        <!-- executor to channel (bright) -->
+        <path d="M542,116 C554,116 554,124 572,124" stroke="#fff" stroke-width="1.5" fill="none" marker-end="url(#arr-bright)"/>
+        <!-- channel to patient / navigator -->
+        <g stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+          <path d="M574,300 C300,300 200,305 136,305"/>
+          <path d="M574,320 C320,352 220,357 136,357"/>
+        </g>
+
+        <!-- result strip -->
+        <rect x="392" y="300" width="150" height="58" rx="8" fill="#1c1c1c" stroke="#5a5a5a"/>
+        <text x="467" y="324" text-anchor="middle" font-family="SF Mono,monospace" font-size="10" fill="#ededed">next_task spawned</text>
+        <text x="467" y="342" text-anchor="middle" font-family="SF Mono,monospace" font-size="10" fill="#cfcfcf">or escalate to nav</text>
+        <path d="M467,198 L467,300" stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+      </svg>
+      <figcaption>
+        Triggers enter from the left, the state executor drives every task, and the channel adapter (dashed)
+        is the one seam that changes when voice replaces Slack. Everything left of that seam is reused as-is.
+      </figcaption>
+    </figure>
+    <table>
+      <thead><tr><th>Component</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td>Trigger engine</td><td>Two inputs: an event webhook (system-detected) and a nightly scan job (derived "overdue by N" predicates). Both mint tasks from a playbook.</td></tr>
+        <tr><td>Playbook registry</td><td>The five versioned configs. Loaded at task creation to stamp goal, transitions, retry policy onto the task.</td></tr>
+        <tr><td>State executor</td><td>The <code>advance(task, event)</code> loop. The only place state changes. Writes the event log on every transition.</td></tr>
+        <tr><td>LLM brain</td><td>Four calls: compose a turn, interpret a reply against the goal, detect fallout, draft a summary. This is the part that becomes the voice agent's dialogue policy later.</td></tr>
+        <tr><td>Channel adapter</td><td>An interface with <code>send()</code> and an inbound reply callback. Slack implements it now; a voice implementation drops in later.</td></tr>
+        <tr><td>Data</td><td>Task store (current state), event log (every transition), comm log (every message and reply, the raw thread).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 05 ============ -->
+  <section id="s05">
+    <h2><span class="num">05</span> The Conversation Loop</h2>
+    <p>
+      This is the heart of the POC, walked through on the overdue-chase example (playbook 2, goal: capture a
+      reschedule date). Step through it and watch the active hop light up. The happy path is steps 1 to 6;
+      step 7 is the branch that fires when the patient goes off-script.
+    </p>
+
+    <div class="walk" data-walk>
+      <figure class="diagram">
+        <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Conversation loop: trigger to executor to LLM to Slack to patient and back">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8f8f8f"/></marker>
+          </defs>
+          <g font-family="SF Mono,monospace" font-size="11">
+            <rect data-step="0" x="16"  y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="71"  y="122" text-anchor="middle" fill="#eaeaea">trigger</text>
+            <rect data-step="1" x="180" y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="235" y="122" text-anchor="middle" fill="#eaeaea">executor</text>
+            <rect data-step="1" x="180" y="14"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="235" y="40"  text-anchor="middle" fill="#eaeaea">LLM brain</text>
+            <rect data-step="2" x="360" y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="415" y="122" text-anchor="middle" fill="#eaeaea">Slack</text>
+            <rect data-step="2" x="540" y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="595" y="122" text-anchor="middle" fill="#eaeaea">patient</text>
+            <rect data-step="4" x="360" y="200" width="150" height="40" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="435" y="225" text-anchor="middle" fill="#eaeaea">task + event log</text>
+            <rect data-step="6" x="540" y="200" width="150" height="40" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="615" y="225" text-anchor="middle" fill="#eaeaea">navigator queue</text>
+          </g>
+          <g fill="none" stroke="#666" stroke-width="1.4" marker-end="url(#arr2)">
+            <path data-step="0" d="M126,117 L176,117"/>
+            <path data-step="1" d="M235,96  L235,58"/>
+            <path data-step="2" d="M290,110 L356,110"/>
+            <path data-step="2" d="M470,117 L536,117"/>
+            <path data-step="3" d="M540,128 C440,150 320,150 246,140"/>
+            <path data-step="4" d="M290,124 C320,150 360,180 400,198"/>
+            <path data-step="5" d="M360,210 C300,180 300,150 246,132"/>
+            <path data-step="6" d="M290,132 C360,175 470,190 560,200"/>
+          </g>
+        </svg>
+        <figcaption>
+          One task, one turn: the trigger creates it, the executor composes via the brain, Slack delivers,
+          the reply comes back, and the brain reads it. Matched replies close the task; off-script replies
+          fork to the navigator queue.
+        </figcaption>
+      </figure>
+
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Trigger</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Compose</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Send</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Reply</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Interpret</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="5"><span class="wn-num">6</span><span class="wn-title">Close</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="6"><span class="wn-num">7</span><span class="wn-title">Or fork</span></button>
+      </div>
+
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">Step 1 · Trigger fires</div>
+        <p class="wd-body" data-detail="0">The nightly scan finds patient X's IPN follow-up CT is 30 days overdue with no future appointment. It mints a Task from playbook 2, stamping on the goal (capture a reschedule date), the expected outcomes, and the retry policy. State: <code>QUEUED</code>. First event-log row written.</p>
+        <div class="wd-stage" data-detail="1" hidden>Step 2 · Compose the turn</div>
+        <p class="wd-body" data-detail="1" hidden>The executor calls the LLM brain with the playbook script plus context (first name, program, days overdue, the fact that a nodule is being tracked). The brain returns a short, single-question, opt-out-bearing message. State: <code>IN_PROGRESS</code>, <code>attempt_count = 1</code>.</p>
+        <div class="wd-stage" data-detail="2" hidden>Step 3 · Send over Slack</div>
+        <p class="wd-body" data-detail="2" hidden>The Slack adapter DMs the patient (with a Reschedule / Confirm / Opt-out button set for the easy path, and free text allowed). The outbound message is written to the comm log as the raw thread. The channel used is recorded on the attempt.</p>
+        <div class="wd-stage" data-detail="3" hidden>Step 4 · Reply arrives</div>
+        <p class="wd-body" data-detail="3" hidden>Patient replies "sure, how about next Monday afternoon?" Slack's event webhook delivers it to the response listener, which appends it to the same comm-log thread and calls <code>advance(task, reply)</code>.</p>
+        <div class="wd-stage" data-detail="4" hidden>Step 5 · Interpret against the goal</div>
+        <p class="wd-body" data-detail="4" hidden>The brain is asked one thing: does this reply satisfy the goal, and if so, extract the structured outcome. It returns <code>{response_type: reschedule_requested, date: 2026-07-27}</code> and no barrier signal. This is a match.</p>
+        <div class="wd-stage" data-detail="5" hidden>Step 6 · Close and chain</div>
+        <p class="wd-body" data-detail="5" hidden>State moves to <code>COMPLETED</code>. The <code>outcome_summary</code> is written. The playbook's <code>next_task</code> rule spawns a fresh Task: a pre-scan reminder scheduled for T-48h before the captured date. The loop's whole point, a resolved objective plus the next objective queued, is achieved.</p>
+        <div class="wd-stage" data-detail="6" hidden>Step 7 · The other branch: off-script</div>
+        <p class="wd-body" data-detail="6" hidden>Had the reply instead been "why do I even need this, I feel fine," interpret returns no matched outcome plus a fallout flag. The agent does not answer the clinical question. It runs the acknowledge-and-handoff script, sets state to <code>ESCALATED</code>, and creates a navigator task with the question text visible and an SLA attached (section 07).</p>
+      </div>
+
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 7</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="tag">Why the LLM interpret step matters</div>
+      Buttons alone cannot cover a real patient reply, and a naive keyword match would misread "no, I can't
+      afford this" as a plain decline. Asking the brain to score the reply against the goal, extract the
+      structured outcome, and flag barriers in one pass is exactly the dialogue policy a voice agent needs.
+      Building it now on text means the voice version inherits it.
+    </div>
+  </section>
+
+  <!-- ============ 06 ============ -->
+  <section id="s06">
+    <h2><span class="num">06</span> Task Lifecycle</h2>
+    <p>
+      Every task, regardless of playbook, moves through the same generic states. What differs per playbook is
+      the transition rules and the retry policy, not the state names. The automatic playbooks close on a
+      matched reply; the assisted playbook (5) never closes on the call itself, only when the navigator fills
+      the capture fields.
+    </p>
+
+    <div class="walk" data-walk>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Created</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Queued</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">In progress</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Retry loop</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Completed</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="5"><span class="wn-num">6</span><span class="wn-title">Escalated</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">State · CREATED</div>
+        <p class="wd-body" data-detail="0">A trigger minted the task and stamped the playbook onto it. Nothing has been sent. This exists so the audit trail starts at birth, not at first contact.</p>
+        <div class="wd-stage" data-detail="1" hidden>State · QUEUED</div>
+        <p class="wd-body" data-detail="1" hidden>Ready for the executor to pick up. For assisted tasks (playbook 5), queued means the navigator has been assigned and the pre-call brief is built and waiting in the queue.</p>
+        <div class="wd-stage" data-detail="2" hidden>State · IN_PROGRESS</div>
+        <p class="wd-body" data-detail="2" hidden>A turn has gone out and we are waiting on a reply. <code>attempt_count</code> and <code>channel_used</code> are live here. For playbook 5 this is "the call is happening."</p>
+        <div class="wd-stage" data-detail="3" hidden>State · retry loop (still IN_PROGRESS)</div>
+        <p class="wd-body" data-detail="3" hidden>No reply within the wait interval and attempts remain, so the executor re-sends on the next rung of the channel-escalation ladder (for example SMS then voice, or a second Slack nudge). This is a self-loop, not a new state.</p>
+        <div class="wd-stage" data-detail="4" hidden>State · COMPLETED</div>
+        <p class="wd-body" data-detail="4" hidden>The goal was met: a matched outcome for automatic tasks, or the capture fields filled for the assisted one. The completion gate is what enforces this: an assisted task cannot reach completed until <code>patient_understood</code>, <code>scheduled</code>, <code>questions_raised</code>, <code>distress_flag</code>, and <code>action_items</code> are populated. <code>next_task</code> fires here.</p>
+        <div class="wd-stage" data-detail="5" hidden>State · ESCALATED (terminal for Track A)</div>
+        <p class="wd-body" data-detail="5" hidden>Reached on max attempts, a barrier signal, or a fallout reply. The task leaves the automatic track and surfaces on the navigator queue with its full history and the triggering reply visible. A <code>distress_flag</code> on an assisted task routes here too, into a review queue.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 6</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="tag">The retry loop closes back</div>
+      Step 4 loops back onto IN_PROGRESS rather than advancing. It only leaves the loop two ways: a reply
+      arrives (to COMPLETED or ESCALATED) or the attempt budget runs out (to ESCALATED). That bound is what
+      stops a task chasing a patient forever, and it is set per playbook in <code>retry_policy</code>.
+    </div>
+  </section>
+
+  <!-- ============ 07 ============ -->
+  <section id="s07">
+    <h2><span class="num">07</span> Fallout &amp; Escalation</h2>
+    <p>
+      The single most important safety behaviour: an automatic conversation must never guess at a clinical
+      question, and it must never let a question silently drop. When the interpret step returns "no matched
+      outcome" or trips a barrier signal, the agent runs the same three-move handoff every time.
+    </p>
+
+    <div class="walk" data-walk>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Detect</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Acknowledge</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Name a human</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Confirm resolved</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Hand off + SLA</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">Move 0 · Detect the fallout</div>
+        <p class="wd-body" data-detail="0">The reply either matches no expected outcome, or matches one but carries barrier text ("no, I can't afford it"). Either way the brain flags it. V1 is deliberately simple: reply does not fit the closed answer set, so escalate. A richer classifier is a fast-follow once there is real conversation data.</p>
+        <div class="wd-stage" data-detail="1" hidden>Move 1 · Acknowledge, do not answer</div>
+        <p class="wd-body" data-detail="1" hidden>No script exists for "why do I need this," so the agent does not improvise one. It acknowledges the question warmly and explicitly declines to answer it itself. This is the interaction-type gate doing its job in real time.</p>
+        <div class="wd-stage" data-detail="2" hidden>Move 2 · Name a specific human and a timeframe</div>
+        <p class="wd-body" data-detail="2" hidden>"I'm going to have [Navigator], your care coordinator, call you back today." Named where possible via the patient's assigned navigator, falling back to the on-call role mapping. A named person and a "today" beats a vague "someone will follow up."</p>
+        <div class="wd-stage" data-detail="3" hidden>Move 3 · Confirm the part that did resolve</div>
+        <p class="wd-body" data-detail="3" hidden>If the patient did confirm the appointment before asking the question, the agent still confirms that: "Thanks for confirming, we'll see you [date]." The handoff never makes the resolved part feel dropped. A call never ends mid-question.</p>
+        <div class="wd-stage" data-detail="4" hidden>Backend · Escalate with the question visible</div>
+        <p class="wd-body" data-detail="4" hidden>State to <code>ESCALATED</code>; <code>assigned_navigator</code> resolves to the patient's navigator; the raw thread attaches via <code>raw_log_ref</code>; a structured escalation reason is written; the navigator queue card shows the actual question, not just "call back." An SLA (same business day) attaches so it cannot rot in the queue.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 5</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+
+    <p>
+      On Slack this is a real, demoable moment: the patient DM shows the graceful handoff, and a card appears
+      in <code>#navigator-queue</code> the same instant with the flagged question and the transcript excerpt
+      on it. That is Track A becoming Track B in front of you, which is the behaviour worth showing.
+    </p>
+  </section>
+
+  <!-- ============ 08 ============ -->
+  <section id="s08">
+    <h2><span class="num">08</span> Data Model</h2>
+    <p>
+      Four tables. The task table is current state; the event log and comm log are append-only history. The
+      event log is the audit artifact that answers "how long did this sit before someone acted."
+    </p>
+    <h3>task</h3>
+    <table>
+      <thead><tr><th>Column</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>task_id</code>, <code>patient_id</code>, <code>program</code></td><td>Identity and LCS/IPN.</td></tr>
+        <tr><td><code>playbook_id</code></td><td>Which of the five. Determines goal, transitions, retry policy.</td></tr>
+        <tr><td><code>source_event</code></td><td>What triggered it: an event, or a scan predicate.</td></tr>
+        <tr><td><code>finding_context</code></td><td>Structured fields, populated only for playbook 5 (Lung-RADS category, nodule size).</td></tr>
+        <tr><td><code>automation_tier</code>, <code>interaction_type</code></td><td>auto / assisted; binary_logistics / open_clinical.</td></tr>
+        <tr><td><code>state</code></td><td>created / queued / in_progress / completed / escalated / failed / closed.</td></tr>
+        <tr><td><code>attempt_count</code>, <code>channel_selected</code></td><td>Retry bookkeeping.</td></tr>
+        <tr><td><code>goal</code>, <code>expected_outcomes</code></td><td>Copied from the playbook at creation, so the interpret step is self-contained.</td></tr>
+        <tr><td><code>outcome_summary</code></td><td>Structured, written on completion. Schema varies by playbook.</td></tr>
+        <tr><td><code>assigned_navigator</code>, <code>ownership_status</code></td><td>Playbook 5 only. Ownership: proposed / accepted / declined / fallback_assigned.</td></tr>
+        <tr><td><code>raw_log_ref</code></td><td>Pointer into the comm log thread.</td></tr>
+        <tr><td><code>stage_entered_at</code></td><td>Timestamp of the current state's entry.</td></tr>
+      </tbody>
+    </table>
+    <h3>event_log (append-only)</h3>
+    <table>
+      <thead><tr><th>Column</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>task_id</code>, <code>patient_id</code></td><td>What this transition belongs to.</td></tr>
+        <tr><td><code>from_state</code>, <code>to_state</code></td><td>The move.</td></tr>
+        <tr><td><code>changed_by</code></td><td>system / scan / navigator-id.</td></tr>
+        <tr><td><code>timestamp</code></td><td>Every transition, no exceptions. This is the non-negotiable audit standard.</td></tr>
+      </tbody>
+    </table>
+    <h3>communication_log (append-only)</h3>
+    <table>
+      <thead><tr><th>Column</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>patient_id</code>, <code>task_id</code></td><td>Cross-task, patient-indexed. Powers the per-patient timeline.</td></tr>
+        <tr><td><code>direction</code>, <code>channel</code>, <code>body</code></td><td>outbound / inbound; the raw message text.</td></tr>
+        <tr><td><code>interpreted_outcome</code></td><td>What the brain read an inbound message as, kept next to the raw text.</td></tr>
+        <tr><td><code>timestamp</code></td><td>Chronological ordering for the timeline view.</td></tr>
+      </tbody>
+    </table>
+    <h3>playbook (config, versioned)</h3>
+    <p>
+      Not a runtime table in the strict sense; a versioned config store holding the five definitions from
+      section 02. Kept alongside a <code>stage → allowed communication types</code> lookup so "what could this
+      patient receive right now" is answerable by reading the catalog, not by tracing engine logic.
+    </p>
+  </section>
+
+  <!-- ============ 09 ============ -->
+  <section id="s09">
+    <h2><span class="num">09</span> Stack &amp; Why Slack</h2>
+    <p>
+      Deliberately boring, single-process, fast to stand up. Nothing here is load-bearing for the eventual
+      product except the shape of the interfaces.
+    </p>
+    <table>
+      <thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Runtime</td><td>Python + FastAPI</td><td>One service holds the webhook, the executor, and the adapters. Easy to reason about for a POC.</td></tr>
+        <tr><td>Scheduler</td><td>APScheduler</td><td>Runs the nightly scan and the retry-interval checks. No separate infra.</td></tr>
+        <tr><td>Store</td><td>SQLite (to Postgres later)</td><td>The four tables above. Zero setup; migrate the day it needs concurrency.</td></tr>
+        <tr><td>Channel</td><td>Slack Bolt SDK</td><td>Patient DMs + a <code>#navigator-queue</code> channel behind one adapter interface.</td></tr>
+        <tr><td>Brain</td><td>Anthropic SDK (Claude)</td><td>Compose, interpret, detect fallout, draft summaries. The dialogue policy that carries over to voice.</td></tr>
+      </tbody>
+    </table>
+    <h3>Why Slack is the right POC channel</h3>
+    <p>
+      Slack gives us both sides of the system in one tool with no telephony, no consent law, and no phone
+      numbers. The patient is a DM thread; the navigator queue is a channel with Block Kit cards. Buttons
+      cover the binary-logistics happy path, and free-text replies let us demo the LLM interpret step and the
+      fallout handoff live. It is the fastest path to showing the actual behaviour that matters.
+    </p>
+    <div class="callout">
+      <div class="tag">The alternative, and why we still start with Slack</div>
+      WhatsApp or SMS via Twilio is one step more realistic (patients actually receive texts) and worth doing
+      as the second adapter. But it adds sandbox setup, opt-in handling, and per-number friction that buys us
+      nothing for proving the engine. Because both sit behind the same <code>send()</code> / reply-callback
+      interface, moving from Slack to Twilio to voice is swapping an adapter, never touching a playbook. So we
+      start on Slack precisely because the choice is reversible.
+    </div>
+    <div class="grid-shift">
+      <div class="shift-row">
+        <div class="from">POC</div><div class="arrow">→</div><div class="to">Slack adapter (DM + navigator channel)</div>
+      </div>
+      <div class="shift-row">
+        <div class="from">Next</div><div class="arrow">→</div><div class="to">Twilio SMS / WhatsApp adapter, same interface</div>
+      </div>
+      <div class="shift-row">
+        <div class="from">Later</div><div class="arrow">→</div><div class="to">Voice adapter: STT in, TTS out, brain unchanged</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10 ============ -->
+  <section id="s10">
+    <h2><span class="num">10</span> Build Plan &amp; Deferred</h2>
+    <p>
+      Five milestones, each independently demoable. The order front-loads the risky part (one automatic
+      playbook working end to end) and leaves breadth for last.
+    </p>
+
+    <div class="walk" data-walk>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">M0</span><span class="wn-title">Skeleton</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">M1</span><span class="wn-title">One flow</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">M2</span><span class="wn-title">Fallout</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">M3</span><span class="wn-title">Assisted</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">M4</span><span class="wn-title">Breadth</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">M0 · Skeleton and data model</div>
+        <p class="wd-body" data-detail="0">FastAPI service, the four tables, the Slack adapter with <code>send()</code> and a reply webhook, and a seed script that loads a handful of synthetic patients with conditions. Prove a DM goes out and a reply lands in the comm log.</p>
+        <div class="wd-stage" data-detail="1" hidden>M1 · One automatic playbook, end to end</div>
+        <p class="wd-body" data-detail="1" hidden>Playbook 2 (overdue chase) fully: nightly scan mints the task, the brain composes, Slack sends, a date reply is interpreted and captured, the task completes, and <code>next_task</code> spawns the pre-scan reminder. This milestone proves the whole thesis; everything after is expansion.</p>
+        <div class="wd-stage" data-detail="2" hidden>M2 · Retry ladder and fallout escalation</div>
+        <p class="wd-body" data-detail="2" hidden>The retry loop with the channel-escalation ladder and a max-attempt bound, plus the three-move fallout handoff creating a card in <code>#navigator-queue</code> with the question visible and an SLA. This is the trust-critical behaviour.</p>
+        <div class="wd-stage" data-detail="3" hidden>M3 · The assisted playbook (5)</div>
+        <p class="wd-body" data-detail="3" hidden>New-finding talk track: ownership fallback chain to know the task is even createable, a pre-call brief posted to the navigator, and the structured capture fields as the completion gate. V1 is talk-track plus manual capture, no recording. This is the Track B half.</p>
+        <div class="wd-stage" data-detail="4" hidden>M4 · Remaining playbooks and history views</div>
+        <p class="wd-body" data-detail="4" hidden>Playbooks 1, 3, 4 (they reuse M1's mechanics with different content and goals), the per-patient timeline, and the per-navigator activity feed so Track A actions are visible even when they never escalate.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 5</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+
+    <h3>Explicitly deferred</h3>
+    <ul class="clean">
+      <li>Voice-agent call placement and the listen-and-summarize half of playbook 5 (needs telephony, consent handling, STT). The talk-track and manual capture ship without it.</li>
+      <li>NLP-based Lung-RADS / Fleischner extraction. Risk classification runs on structured fields only.</li>
+      <li>A configurable automation-tier engine. The POC hardcodes binary to automatic, open-clinical to assisted.</li>
+      <li>Self-service playbook editing and role-mapping config. Both are versioned files in the POC.</li>
+      <li>Cross-program enrollment linking and the insurance/coverage data source.</li>
+    </ul>
+
+    <div class="callout">
+      <div class="tag">Open decisions worth resolving before M1</div>
+      Three things are genuine choices, not defaults: the SLA window before an ordering physician's silence
+      counts as an implicit decline in the ownership chain; the fallout-detection sensitivity (too loose and
+      everything escalates, too tight and real concerns get missed, likely needs a short tuning pilot); and
+      whether <code>outcome_summary</code> is pure navigator entry or AI-drafted-then-confirmed, which changes
+      both build scope and the strength of the audit artifact.
+    </div>
+  </section>
+
+  <footer>
+    patient-comm-agent-poc.html · self-contained, OLED monochrome · double-click to open offline
+  </footer>
+
+</div>
+
+<style>
+:root{
+  --bg:#000;--surface:#0a0a0a;--surface-2:#111;--border:#262626;--border-bright:#3a3a3a;
+  --text:#f2f2f2;--text-dim:#b4b4b4;--text-faint:#8f8f8f;--accent:#fff;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:72px 28px 120px}
+h1{font-size:40px;line-height:1.12;font-weight:600;letter-spacing:-.02em;margin:0 0 22px;
+  background:linear-gradient(180deg,#fff,#9a9a9a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+h2{font-size:13px;font-family:var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--text-faint);
+  margin:0 0 28px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+h2 .num{color:var(--accent)}
+h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:30px 0 10px;color:#f2f2f2}
+section{margin:64px 0}
+p{color:#eaeaea}
+code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:#eaeaea}
+a{color:var(--text);border-bottom:1px solid var(--border-bright);text-decoration:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px}
+.chip{font-family:var(--mono);font-size:12px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:4px 12px;background:var(--surface)}
+.lede{font-size:20px;line-height:1.6;color:#dadada;border-left:2px solid var(--border-bright);padding-left:18px;margin:22px 0 0}
+.callout{border:1px solid var(--border-bright);border-left:3px solid #6a6a6a;border-radius:10px;padding:18px 22px;background:var(--surface);margin:24px 0}
+.callout .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px}
+.badge{font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid var(--border-bright);display:inline-block}
+.b-ok{color:#fff;background:#1c1c1c;border-color:#555}
+.b-warn{color:#c9c9c9;background:#141414;border-color:#3a3a3a;border-style:dashed}
+
+table{width:100%;border-collapse:collapse;margin:22px 0;font-size:15.5px}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border-bright);vertical-align:bottom}
+td{padding:11px 12px;border-bottom:1px solid var(--border);color:#eaeaea;vertical-align:top;line-height:1.55}
+.table-scroll{overflow-x:auto}
+
+ul.clean{list-style:none;padding:0;margin:16px 0}
+ul.clean li{border:1px solid var(--border);border-left:2px solid var(--border-bright);border-radius:8px;padding:12px 16px;margin:8px 0;color:#eaeaea;font-size:16px;background:var(--surface)}
+
+.grid-shift{margin:22px 0;display:flex;flex-direction:column;gap:8px}
+.shift-row{display:grid;grid-template-columns:1fr 40px 1.4fr;align-items:center;gap:6px;
+  border:1px solid var(--border);border-radius:9px;padding:12px 16px;background:var(--surface)}
+.shift-row .from{color:#b4b4b4;font-size:15px}
+.shift-row .arrow{color:var(--text-faint);font-family:var(--mono);text-align:center}
+.shift-row .to{color:#f2f2f2;font-size:15px;font-weight:500}
+
+footer{margin-top:80px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text-faint)}
+
+/* walkthrough */
+.walk{background:radial-gradient(800px 320px at 50% -10%,#141414,transparent 70%),var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:32px 28px;margin:24px 0}
+.walk-track{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.wnode{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:96px;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+  color:var(--text-dim);font-family:var(--sans);transition:all .2s;opacity:.55}
+.wnode:hover{opacity:.85;border-color:var(--border-bright)}
+.wnode.active{opacity:1;border-color:#6a6a6a;color:var(--text);
+  background:linear-gradient(180deg,#1a1a1a,#0e0e0e);box-shadow:0 12px 44px -22px rgba(255,255,255,.3)}
+.wnode.done{opacity:.8;border-color:var(--border-bright)}
+.wn-num{font-family:var(--mono);font-size:12px;font-weight:600;min-width:24px;height:24px;padding:0 6px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;background:#222;color:var(--text-dim)}
+.wnode.active .wn-num{background:var(--accent);color:#000}
+.wn-title{font-size:13px;font-weight:600}
+.wn-arrow{color:var(--text-faint);font-family:var(--mono)}
+.walk-detail{margin-top:24px;border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:#000;min-height:96px}
+.wd-stage{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px}
+.wd-body{margin:0;color:#eaeaea;font-size:16.5px;line-height:1.65}
+.walk-nav{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:22px}
+.wbtn{font-family:var(--mono);font-size:13px;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-bright);border-radius:9px;padding:9px 18px;cursor:pointer;transition:all .15s}
+.wbtn:hover:not(:disabled){background:#1c1c1c;border-color:#5a5a5a}
+.wbtn:disabled{opacity:.3;cursor:not-allowed}
+.wcount{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+.wcount b{color:var(--text)}
+@media(max-width:680px){.wn-arrow{display:none}.wnode{min-width:0;flex:1 1 72px}}
+
+/* diagram */
+figure.diagram{margin:24px 0 6px;padding:18px 14px 14px;background:#050505;border:1px solid var(--border);border-radius:14px}
+figure.diagram svg{width:100%;height:auto;display:block}
+figure.diagram figcaption{margin-top:14px;padding:0 8px;font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:1.6}
+.diagram [data-step]{opacity:.28;transition:opacity .25s,stroke .25s,fill .25s}
+.diagram [data-step].lit{opacity:1}
+.diagram path[data-step].lit{stroke:#fff;stroke-width:1.8}
+.diagram rect[data-step].lit{stroke:#fff;stroke-width:1.6;fill:#262626}
+
+/* TOC */
+.toc{position:fixed;top:0;left:0;width:240px;height:100vh;overflow-y:auto;
+  padding:72px 22px 40px;border-right:1px solid var(--border);background:#000;display:none;z-index:20}
+.toc-label{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+.toc a{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-dim);
+  text-decoration:none;border:none;padding:7px 0;line-height:1.45;transition:color .15s}
+.toc a:hover{color:var(--text)}
+.toc a.active{color:var(--text)}
+.toc-num{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:0 0 auto}
+.toc a.active .toc-num{color:var(--accent)}
+@media(min-width:1181px){body{padding-left:240px}.toc{display:block}}
+</style>
+
+<script>
+document.querySelectorAll('[data-walk]').forEach(function(walk){
+  var nodes   = walk.querySelectorAll('.wnode');
+  var details = walk.querySelectorAll('[data-detail]');
+  var calls   = walk.querySelectorAll('.diagram [data-step]');
+  var prev    = walk.querySelector('.wprev');
+  var next    = walk.querySelector('.wnext');
+  var count   = walk.querySelector('.wcount b');
+  var total   = nodes.length;
+  var i = 0;
+  function render(){
+    nodes.forEach(function(n,idx){
+      n.classList.toggle('active', idx===i);
+      n.classList.toggle('done', idx<i);
+    });
+    details.forEach(function(d){ d.hidden = (+d.dataset.detail !== i); });
+    calls.forEach(function(c){ c.classList.toggle('lit', +c.dataset.step === i); });
+    if(count) count.textContent = i+1;
+    prev.disabled = i===0;
+    next.disabled = i===total-1;
+  }
+  next.addEventListener('click', function(){ if(i<total-1){i++;render();} });
+  prev.addEventListener('click', function(){ if(i>0){i--;render();} });
+  nodes.forEach(function(n){ n.addEventListener('click', function(){ i=+n.dataset.i; render(); }); });
+  walk.tabIndex = 0;
+  walk.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ if(i<total-1){i++;render();} }
+    if(e.key==='ArrowLeft'){ if(i>0){i--;render();} }
+  });
+  render();
+});
+(function(){
+  var links = {};
+  document.querySelectorAll('.toc a[data-toc]').forEach(function(a){ links[a.dataset.toc] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        Object.keys(links).forEach(function(k){ links[k].classList.remove('active'); });
+        if(links[e.target.id]) links[e.target.id].classList.add('active');
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px'});
+  document.querySelectorAll('section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>
