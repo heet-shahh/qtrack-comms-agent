@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore'
 import ModeSwitcher from '../components/ModeSwitcher'
 import Dashboard from '../views/Dashboard'
 import Workflows from '../views/Workflows'
+import VoiceAgent from '../views/VoiceAgent'
 import TaskQueue from '../views/TaskQueue'
 import TaskDetail from '../views/TaskDetail'
 import Patients from '../views/Patients'
@@ -13,6 +14,7 @@ import TriggerSimulator from '../views/TriggerSimulator'
 const NAV = [
   { group: 'Configure', items: [
     { key: 'workflows', label: 'Workflows', ic: '❏' },
+    { key: 'voice', label: 'Voice Agent', ic: '🎙' },
     { key: 'trigger', label: 'Trigger Simulator', ic: '⚡' },
   ]},
   { group: 'Monitor', items: [
@@ -26,7 +28,7 @@ const NAV = [
 const TITLES = {
   dashboard: 'Dashboard', workflows: 'Workflow Configuration', queue: 'Task Queue',
   trigger: 'Trigger Simulator', patients: 'Patients', events: 'Event Log',
-  task: 'Task Detail', patient: 'Patient Record',
+  task: 'Task Detail', patient: 'Patient Record', voice: 'Voice Agent (Retell)',
 }
 
 export default function AdminApp() {
@@ -76,6 +78,7 @@ export default function AdminApp() {
         <div className="content">
           {view === 'dashboard' && <Dashboard />}
           {view === 'workflows' && <Workflows />}
+          {view === 'voice' && <VoiceAgent />}
           {view === 'queue' && <TaskQueue />}
           {view === 'task' && <TaskDetail />}
           {view === 'trigger' && <TriggerSimulator />}

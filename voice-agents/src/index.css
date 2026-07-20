@@ -299,3 +299,11 @@ table.tbl td.mono { font-family: var(--mono); color: var(--text-faint); font-siz
 @media (max-width: 720px) {
   .nav-top-inner, .nav-tabs { flex-wrap: wrap; }
 }
+
+/* ================= voice agent ================= */
+.voicedot { width: 11px; height: 11px; border-radius: 50%; background: var(--text-faint); flex: 0 0 11px; }
+.voicedot.connecting { background: var(--warn); animation: vpulse 1s infinite; }
+.voicedot.live { background: var(--ok); animation: vpulse 1.2s infinite; }
+.voicedot.ended { background: var(--text-dim); }
+.voicedot.error { background: var(--bad); }
+@keyframes vpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(63,185,80,.45); } 50% { box-shadow: 0 0 0 6px rgba(63,185,80,0); } }

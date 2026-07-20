@@ -10,10 +10,23 @@ write to the event log.
 
 ```bash
 npm install
-npm run dev
+npm run dev        # frontend only (mock UI, no voice)
 ```
 
 Opens at http://localhost:5180
+
+### With the Retell voice adapter
+
+```bash
+cp server/.env.example server/.env   # then paste your Retell API key
+npm run dev:all                       # runs frontend (5180) + backend (8787) together
+```
+
+Then go to **Admin → Voice Agent**, pick a playbook, and press **Start voice call** — you
+talk to the agent through your mic (browser will ask for mic permission), playing the
+patient. When the call ends, the same `interpret()` brain reads the transcript and maps it
+to the playbook's outcome. The backend (`server/index.js`) holds the Retell key server-side
+and mints web-call tokens; the key never reaches the browser and is never committed.
 
 ## Two modes (toggle top-right: "Viewing as")
 
@@ -49,10 +62,22 @@ Real deployments gate these by role; here a switcher flips between them.
 
 ## Plugging in a backend
 
-Replace the store's mutators with API calls. The three seams:
-- `src/lib/interpret.js` → a Claude call (same input/output contract).
-- `src/lib/stateMachine.js#composeMessage` → a Claude call.
-- Slack/voice send + inbound reply → a real channel adapter.
+Replace the store's mutators with API calls. The seams:
+- `src/lib/interpret.js` → a Claude call (same input/output contract). Already reused as-is
+  to read voice-call transcripts, not just text replies.
+- `src/lib/stateMachine.js#composeMessage` → a Claude call for text; `src/lib/voicePrompt.js`
+  is the voice equivalent.
+- Channel adapters: the Slack/SMS send is stubbed in the store; the **Retell voice adapter is
+  real** (`server/index.js` + `src/views/VoiceAgent.jsx`). Both sit behind the same idea —
+  send a turn, capture a reply, feed the outcome back to the task.
+
+## Layout note
+
+```
+server/            Express backend — holds the Retell key, mints web-call tokens (gitignored .env)
+src/lib/voicePrompt.js   playbook + patient -> Retell agent instructions
+src/views/VoiceAgent.jsx live web-call UI (Retell Web SDK) + transcript + outcome mapping
+```
 
 ## Structure
 
