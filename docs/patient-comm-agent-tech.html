@@ -1,0 +1,466 @@
+<nav class="toc" aria-label="Contents">
+  <div class="toc-label">Contents</div>
+  <a href="#s01" data-toc="s01"><span class="toc-num">01</span> Architecture</a>
+  <a href="#s02" data-toc="s02"><span class="toc-num">02</span> Objects &amp; state machine</a>
+  <a href="#s03" data-toc="s03"><span class="toc-num">03</span> The conversation loop</a>
+  <a href="#s04" data-toc="s04"><span class="toc-num">04</span> Fallout &amp; escalation</a>
+  <a href="#s05" data-toc="s05"><span class="toc-num">05</span> Channels &amp; voice (Retell)</a>
+  <a href="#s06" data-toc="s06"><span class="toc-num">06</span> The brain</a>
+  <a href="#s07" data-toc="s07"><span class="toc-num">07</span> Data &amp; logging</a>
+  <a href="#s08" data-toc="s08"><span class="toc-num">08</span> Stack &amp; running it</a>
+  <a href="#s09" data-toc="s09"><span class="toc-num">09</span> Build status</a>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">qTrack · Patient Communication · Technical Design</div>
+    <h1>Technical Design &amp; Implementation</h1>
+    <div class="meta">
+      <span class="chip">2026-07-21</span>
+      <span class="chip">Working POC</span>
+      <span class="chip">Voice: live (Retell)</span>
+      <span class="chip"><a href="patient-comm-agent-prd.html">Companion: PRD →</a></span>
+    </div>
+    <p class="lede">
+      How the system is built. The what and why are in the companion PRD; this document is the engine, the
+      state machine, the channels, and the current build. The one bet everything rests on: the channel is a
+      swappable adapter, and the engine behind it never changes.
+    </p>
+  </header>
+
+  <!-- 01 -->
+  <section id="s01">
+    <h2><span class="num">01</span> Architecture</h2>
+    <p>
+      Triggers enter from the left. Everything inside the container is what we build. The dashed region is the
+      one deliberate seam: the channel adapter, where text lives today and voice plugs in. Nothing to its left
+      cares which channel is attached.
+    </p>
+    <figure class="diagram">
+      <svg viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Triggers and users around a communication engine, with a swappable channel adapter">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a8a"/></marker>
+          <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff"/></marker>
+        </defs>
+        <g font-family="SF Mono,monospace" font-size="11" fill="#cfcfcf">
+          <rect x="14" y="34"  width="120" height="38" rx="7" fill="#111" stroke="#3a3a3a"/><text x="74" y="57"  text-anchor="middle">EMR / RIS event</text>
+          <rect x="14" y="86"  width="120" height="38" rx="7" fill="#111" stroke="#3a3a3a"/><text x="74" y="109" text-anchor="middle">Nightly scan</text>
+          <rect x="14" y="286" width="120" height="38" rx="7" fill="#1c1c1c" stroke="#fff" stroke-width="1.4"/><text x="74" y="309" text-anchor="middle" fill="#fff">Patient</text>
+          <rect x="14" y="338" width="120" height="38" rx="7" fill="#1c1c1c" stroke="#fff" stroke-width="1.4"/><text x="74" y="361" text-anchor="middle" fill="#fff">Navigator</text>
+        </g>
+        <g stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+          <path d="M134,53  C165,53 165,86 196,86"/>
+          <path d="M134,105 C165,105 165,96 196,96"/>
+        </g>
+        <rect x="196" y="20" width="508" height="360" rx="12" fill="#0a0a0a" stroke="#3a3a3a"/>
+        <text x="214" y="42" font-family="SF Mono,monospace" font-size="10" letter-spacing="2.4" fill="#5c5c5c">COMMUNICATION ENGINE</text>
+        <g font-family="SF Mono,monospace" font-size="11" fill="#cfcfcf">
+          <rect x="214" y="66"  width="150" height="40" rx="7" fill="#111" stroke="#3a3a3a"/><text x="289" y="90"  text-anchor="middle">Trigger engine</text>
+          <rect x="214" y="118" width="150" height="40" rx="7" fill="#111" stroke="#3a3a3a"/><text x="289" y="142" text-anchor="middle">Workflow registry</text>
+          <rect x="392" y="92"  width="150" height="46" rx="7" fill="#1c1c1c" stroke="#fff" stroke-width="1.5"/><text x="467" y="120" text-anchor="middle" fill="#fff">State executor</text>
+          <rect x="392" y="158" width="150" height="40" rx="7" fill="#111" stroke="#3a3a3a"/><text x="467" y="182" text-anchor="middle">Brain (interpret)</text>
+          <rect x="214" y="212" width="150" height="72" rx="7" fill="#050505" stroke="#3a3a3a"/>
+          <text x="289" y="234" text-anchor="middle" fill="#8f8f8f">Task store</text>
+          <text x="289" y="252" text-anchor="middle" fill="#8f8f8f">Event log</text>
+          <text x="289" y="270" text-anchor="middle" fill="#8f8f8f">Comm log</text>
+        </g>
+        <rect x="560" y="66" width="128" height="292" rx="10" fill="#050505" stroke="#cfcfcf" stroke-dasharray="5,4"/>
+        <text x="574" y="88" font-family="SF Mono,monospace" font-size="9" letter-spacing="2" fill="#cfcfcf">CHANNEL ADAPTER</text>
+        <g font-family="SF Mono,monospace" font-size="11">
+          <rect x="574" y="104" width="100" height="40" rx="7" fill="#1c1c1c" stroke="#6a6a6a"/><text x="624" y="128" text-anchor="middle" fill="#fff">Text (now)</text>
+          <rect x="574" y="156" width="100" height="40" rx="7" fill="#1c1c1c" stroke="#6a6a6a"/><text x="624" y="180" text-anchor="middle" fill="#fff">Voice · Retell</text>
+        </g>
+        <g stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+          <path d="M364,86  C378,86 378,110 390,110"/>
+          <path d="M364,138 C378,138 378,116 390,120"/>
+          <path d="M467,138 L467,156"/>
+          <path d="M392,124 C378,150 320,190 300,210"/>
+        </g>
+        <path d="M542,116 C554,116 554,124 572,124" stroke="#fff" stroke-width="1.5" fill="none" marker-end="url(#arrb)"/>
+        <g stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)">
+          <path d="M574,300 C300,300 200,305 136,305"/>
+          <path d="M574,320 C320,352 220,357 136,357"/>
+        </g>
+        <rect x="392" y="300" width="150" height="58" rx="8" fill="#1c1c1c" stroke="#5a5a5a"/>
+        <text x="467" y="324" text-anchor="middle" font-family="SF Mono,monospace" font-size="10" fill="#ededed">next task spawned</text>
+        <text x="467" y="342" text-anchor="middle" font-family="SF Mono,monospace" font-size="10" fill="#cfcfcf">or escalate to nav</text>
+        <path d="M467,198 L467,300" stroke="#666" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+      </svg>
+      <figcaption>The state executor drives every task. The channel adapter (dashed) is the only part that changes when voice replaces text.</figcaption>
+    </figure>
+    <table>
+      <thead><tr><th>Component</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td>Trigger engine</td><td>Two inputs: EMR/RIS events, and a nightly scan for time-based conditions ("overdue by N days"). Both mint tasks.</td></tr>
+        <tr><td>Workflow registry</td><td>The versioned configs (goal, retries, escalation, next step). Loaded onto a task at creation. Editable in the admin console.</td></tr>
+        <tr><td>State executor</td><td>The <code>advance(task, event)</code> loop. The only place state changes; writes the event log on every transition.</td></tr>
+        <tr><td>Brain</td><td>Composes a turn and interprets a reply against the goal. Channel-independent.</td></tr>
+        <tr><td>Channel adapter</td><td>An interface: send a turn, receive a reply. Text stub today; the Retell voice adapter is real.</td></tr>
+        <tr><td>Stores</td><td>Task (current state), event log (every transition), comm log (every message and reply).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 02 -->
+  <section id="s02">
+    <h2><span class="num">02</span> Core objects &amp; the state machine</h2>
+    <h3>Workflow (the config)</h3>
+    <p>A versioned object, one per condition. It describes behaviour; it never runs.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>trigger</code></td><td>The condition that mints a task.</td></tr>
+        <tr><td><code>tier</code></td><td><code>automatic</code> or <code>assisted</code>.</td></tr>
+        <tr><td><code>goal</code>, <code>successOutcome</code></td><td>What the agent chases, and what counts as done.</td></tr>
+        <tr><td><code>expectedOutcomes</code></td><td>The closed set of replies that count as a match.</td></tr>
+        <tr><td><code>barrierSignals</code></td><td>Words that force an immediate escalation even inside a matched reply.</td></tr>
+        <tr><td><code>retryPolicy</code></td><td>Max attempts, wait interval, and the channel-escalation ladder.</td></tr>
+        <tr><td><code>nextTaskOnSuccess</code></td><td>What to spawn on success (for example, a pre-scan reminder).</td></tr>
+      </tbody>
+    </table>
+    <h3>Task (the running instance)</h3>
+    <p>
+      One workflow running for one patient. It carries the live context, the current <code>state</code>,
+      <code>attemptCount</code>, the captured <code>outcomeSummary</code>, and (for assisted) the ownership and
+      navigator fields. It is the object every log row points back to.
+    </p>
+    <h3>States</h3>
+    <p>
+      Every task moves through the same states; the transition rules differ per workflow.
+      <code>created → queued → in_progress → (completed | escalated)</code>. Automatic tasks close on a matched
+      reply; the assisted task closes only when the navigator fills the capture fields (the completion gate).
+    </p>
+  </section>
+
+  <!-- 03 -->
+  <section id="s03">
+    <h2><span class="num">03</span> The conversation loop</h2>
+    <p>The overdue-chase workflow, end to end. Stepping lights the active hop. Steps 1 to 6 are the happy path; 7 is the off-script branch.</p>
+    <div class="walk" data-walk>
+      <figure class="diagram">
+        <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Trigger to message to reply to outcome">
+          <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8f8f8f"/></marker></defs>
+          <g font-family="SF Mono,monospace" font-size="11">
+            <rect data-step="0" x="16"  y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="71"  y="122" text-anchor="middle" fill="#eaeaea">trigger</text>
+            <rect data-step="1" x="180" y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="235" y="122" text-anchor="middle" fill="#eaeaea">executor</text>
+            <rect data-step="1" x="180" y="14"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="235" y="40"  text-anchor="middle" fill="#eaeaea">brain</text>
+            <rect data-step="2" x="360" y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="415" y="122" text-anchor="middle" fill="#eaeaea">channel</text>
+            <rect data-step="2" x="540" y="96"  width="110" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="595" y="122" text-anchor="middle" fill="#eaeaea">patient</text>
+            <rect data-step="5" x="360" y="200" width="150" height="40" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="435" y="225" text-anchor="middle" fill="#eaeaea">completed + log</text>
+            <rect data-step="6" x="540" y="200" width="150" height="40" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="615" y="225" text-anchor="middle" fill="#eaeaea">navigator</text>
+          </g>
+          <g fill="none" stroke="#666" stroke-width="1.4" marker-end="url(#a2)">
+            <path data-step="0" d="M126,117 L176,117"/>
+            <path data-step="1" d="M235,96  L235,58"/>
+            <path data-step="2" d="M290,110 L356,110"/>
+            <path data-step="2" d="M470,117 L536,117"/>
+            <path data-step="3" d="M540,128 C440,150 320,150 246,140"/>
+            <path data-step="4" d="M235,58 C150,90 150,150 232,132"/>
+            <path data-step="5" d="M290,124 C320,150 360,180 400,198"/>
+            <path data-step="6" d="M290,132 C360,175 470,190 560,200"/>
+          </g>
+        </svg>
+        <figcaption>A trigger becomes a message, a reply comes back, the brain reads it. A match closes the task; an off-script reply forks to a navigator.</figcaption>
+      </figure>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Trigger</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Compose</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Send</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Reply</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Interpret</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="5"><span class="wn-num">6</span><span class="wn-title">Close</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="6"><span class="wn-num">7</span><span class="wn-title">Or fork</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">Step 1 · Trigger</div>
+        <p class="wd-body" data-detail="0">The nightly scan finds a follow-up CT 30 days overdue with nothing booked, and creates a task from the workflow with the goal stamped on.</p>
+        <div class="wd-stage" data-detail="1" hidden>Step 2 · Compose</div>
+        <p class="wd-body" data-detail="1" hidden>The executor asks the brain for a turn, built from the workflow script and the patient's context. State becomes <code>in_progress</code>, attempt 1.</p>
+        <div class="wd-stage" data-detail="2" hidden>Step 3 · Send</div>
+        <p class="wd-body" data-detail="2" hidden>The channel adapter delivers it and writes the outbound message to the comm log.</p>
+        <div class="wd-stage" data-detail="3" hidden>Step 4 · Reply</div>
+        <p class="wd-body" data-detail="3" hidden>The inbound reply is appended to the log and handed to <code>advance()</code>.</p>
+        <div class="wd-stage" data-detail="4" hidden>Step 5 · Interpret</div>
+        <p class="wd-body" data-detail="4" hidden>The brain returns a structured outcome and flags any barrier or off-script content. Here: <code>reschedule_requested</code>, date extracted, no flag.</p>
+        <div class="wd-stage" data-detail="5" hidden>Step 6 · Close and chain</div>
+        <p class="wd-body" data-detail="5" hidden>State becomes <code>completed</code>, the outcome is written, and <code>nextTaskOnSuccess</code> spawns the pre-scan reminder for the captured date.</p>
+        <div class="wd-stage" data-detail="6" hidden>Step 7 · The fork</div>
+        <p class="wd-body" data-detail="6" hidden>Had the reply been off-script, the brain flags it and the task escalates instead of completing (next section).</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button><span class="wcount"><b>1</b> / 7</span><button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section id="s04">
+    <h2><span class="num">04</span> Fallout &amp; escalation logic</h2>
+    <p>
+      The interpret step returns one of three things: a clean match, an unclear reply (retry on cadence), or a
+      fallout / barrier (escalate now). Escalation runs a fixed three-move script before the task changes state:
+    </p>
+    <ul class="clean">
+      <li><b>Acknowledge, do not answer.</b> No script exists for a clinical question, so the agent does not generate one.</li>
+      <li><b>Name a specific person and a timeframe.</b> The patient's assigned navigator, falling back to on-call, with a same-day promise.</li>
+      <li><b>Confirm what did resolve.</b> If the appointment was already confirmed, confirm it, so nothing feels dropped. A call never ends mid-question.</li>
+    </ul>
+    <p>
+      The task then moves to <code>escalated</code>, the assigned navigator is set, the triggering reply is
+      attached, a structured escalation reason is written, and an SLA is applied. V1 detection is deliberately
+      simple: a reply that does not fit the expected set escalates. A richer classifier is a fast-follow.
+    </p>
+  </section>
+
+  <!-- 05 -->
+  <section id="s05">
+    <h2><span class="num">05</span> Channels &amp; the voice adapter (Retell)</h2>
+    <p>
+      A channel is an adapter with two responsibilities: deliver a turn, and surface a reply. Text is a stub in
+      the prototype. The voice adapter is a real integration with Retell, and it reuses the entire engine
+      unchanged: same workflow, same goal, same interpret step.
+    </p>
+
+    <div class="walk" data-walk>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Build agent</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Mint token</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Browser call</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Transcript</span></button><span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Interpret</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">1 · Build the agent from the workflow</div>
+        <p class="wd-body" data-detail="0">The backend turns the workflow plus patient context into a talk track and creates a Retell LLM and agent (cached per prompt + voice so it does not leak new agents on every call).</p>
+        <div class="wd-stage" data-detail="1" hidden>2 · Mint a web-call token</div>
+        <p class="wd-body" data-detail="1" hidden>The backend calls Retell's <code>v2/create-web-call</code> and returns a short-lived <code>access_token</code> to the browser. The Retell API key stays server-side and is never exposed to the client.</p>
+        <div class="wd-stage" data-detail="2" hidden>3 · Talk in the browser</div>
+        <p class="wd-body" data-detail="2" hidden>The Retell Web SDK connects over WebRTC using the token. No phone number is needed. The agent speaks and listens, chasing its one goal, and the live transcript streams in.</p>
+        <div class="wd-stage" data-detail="3" hidden>4 · Retrieve the transcript</div>
+        <p class="wd-body" data-detail="3" hidden>When the call ends the frontend polls <code>v2/get-call</code> for the transcript, recording, and Retell's own summary and sentiment.</p>
+        <div class="wd-stage" data-detail="4" hidden>5 · The same brain reads it</div>
+        <p class="wd-body" data-detail="4" hidden>The exact <code>interpret()</code> that reads a text reply reads the patient's words from the transcript and maps them to the workflow outcome. Text and voice converge on the same finish line.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button><span class="wcount"><b>1</b> / 5</span><button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+
+    <p>Backend surface (Express, holds the key):</p>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><code>GET /api/voices</code></td><td>Lists Retell voices for the picker.</td></tr>
+        <tr><td class="mono"><code>POST /api/web-call</code></td><td>Ensures an agent for the given prompt + voice, mints a web-call token.</td></tr>
+        <tr><td class="mono"><code>GET /api/call/:id</code></td><td>Fetches transcript, recording, and analysis after the call.</td></tr>
+      </tbody>
+    </table>
+    <p class="callout"><span class="tag">Security</span> The key lives only in a gitignored <code>server/.env</code>, never in the frontend and never committed. The browser only ever receives a short-lived per-call token.</p>
+  </section>
+
+  <!-- 06 -->
+  <section id="s06">
+    <h2><span class="num">06</span> The brain</h2>
+    <p>Two functions, one contract, channel-independent:</p>
+    <ul class="clean">
+      <li><b>compose</b>(workflow, patient, attempt) returns the next turn to say or send.</li>
+      <li><b>interpret</b>(reply, workflow) returns <code>{ matched, outcome, fallout, barrier, rationale }</code>.</li>
+    </ul>
+    <p>
+      In the prototype both are transparent rule-based stubs, so the behaviour is easy to read and demo. They
+      are written to the exact input and output shape a model call will have, so swapping in a hosted model is a
+      drop-in with no change anywhere else. The interpret stub already does double duty: it reads text replies
+      and voice transcripts through the same code path.
+    </p>
+  </section>
+
+  <!-- 07 -->
+  <section id="s07">
+    <h2><span class="num">07</span> Data &amp; logging</h2>
+    <p>Three stores. The task table is current state; the two logs are append-only history.</p>
+    <table>
+      <thead><tr><th>Store</th><th>Holds</th></tr></thead>
+      <tbody>
+        <tr><td><b>Task</b></td><td>Current state, context, attempt count, outcome, ownership and navigator (assisted).</td></tr>
+        <tr><td><b>Event log</b></td><td>Every state transition: from, to, who changed it, timestamp, note. The audit trail.</td></tr>
+        <tr><td><b>Comm log</b></td><td>Every message and reply, patient-indexed and cross-task, so a full history is one lookup away.</td></tr>
+      </tbody>
+    </table>
+    <p>The event log is what answers "how long did this sit before someone acted", regardless of whether the outcome was favourable.</p>
+  </section>
+
+  <!-- 08 -->
+  <section id="s08">
+    <h2><span class="num">08</span> Stack &amp; running it</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Choice</th></tr></thead>
+      <tbody>
+        <tr><td>Frontend</td><td>React + Vite. Two shells: navigator (clinical) and admin (workflow console).</td></tr>
+        <tr><td>State</td><td>A single store standing in for the backend: triggers, <code>advance()</code>, escalation, capture, and editable workflows.</td></tr>
+        <tr><td>Voice backend</td><td>Express, holds the Retell key, mints web-call tokens.</td></tr>
+        <tr><td>Voice client</td><td>Retell Web SDK over WebRTC in the browser.</td></tr>
+      </tbody>
+    </table>
+    <p>Run both together with <code>npm run dev:all</code> (frontend on 5180, backend on 8787, with the frontend proxying <code>/api</code>). The Retell key goes in <code>server/.env</code> (copy <code>server/.env.example</code>).</p>
+  </section>
+
+  <!-- 09 -->
+  <section id="s09">
+    <h2><span class="num">09</span> Build status</h2>
+    <h3>Working now</h3>
+    <ul class="clean">
+      <li>Both experiences: the clinical worklist and the admin workflow console.</li>
+      <li>Five workflows over a text channel, with retries, the off-script handoff, and the completion gate.</li>
+      <li>Editable workflows that flow into the live engine, a per-patient history, and a full event log.</li>
+      <li>A real Retell voice call driven by a workflow, with the same interpret step reading the transcript.</li>
+    </ul>
+    <h3>Next</h3>
+    <ul class="clean">
+      <li>Post the voice-call outcome straight back onto the task so a call completes or escalates it hands-free.</li>
+      <li>Outbound calls to real phones (phone numbers, call-recording consent).</li>
+      <li>Swap the rule-based brain for a hosted model (same contract, no other change).</li>
+      <li>Wire real EMR and scheduling events in place of the trigger simulator.</li>
+    </ul>
+  </section>
+
+  <footer>
+    patient-comm-agent-tech.html · technical design · companion: patient-comm-agent-prd.html
+  </footer>
+
+</div>
+
+<style>
+:root{
+  --bg:#000;--surface:#0a0a0a;--surface-2:#111;--border:#262626;--border-bright:#3a3a3a;
+  --text:#f2f2f2;--text-dim:#b4b4b4;--text-faint:#8f8f8f;--accent:#fff;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:72px 28px 120px}
+h1{font-size:40px;line-height:1.12;font-weight:600;letter-spacing:-.02em;margin:0 0 22px;
+  background:linear-gradient(180deg,#fff,#9a9a9a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+h2{font-size:13px;font-family:var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--text-faint);
+  margin:0 0 28px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+h2 .num{color:var(--accent)}
+h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:30px 0 10px;color:#f2f2f2}
+section{margin:64px 0}
+p{color:#eaeaea}
+code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:#eaeaea}
+a{color:var(--text);border-bottom:1px solid var(--border-bright);text-decoration:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px}
+.chip{font-family:var(--mono);font-size:12px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:4px 12px;background:var(--surface)}
+.chip a{border:none}
+.lede{font-size:20px;line-height:1.6;color:#dadada;border-left:2px solid var(--border-bright);padding-left:18px;margin:22px 0 0}
+.callout{border:1px solid var(--border-bright);border-left:3px solid #6a6a6a;border-radius:10px;padding:18px 22px;background:var(--surface);margin:24px 0;display:block}
+.callout .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;display:block}
+
+table{width:100%;border-collapse:collapse;margin:22px 0;font-size:15.5px}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border-bright);vertical-align:bottom}
+td{padding:11px 12px;border-bottom:1px solid var(--border);color:#eaeaea;vertical-align:top;line-height:1.55}
+td.mono{font-family:var(--mono);font-size:13px}
+
+ul.clean{list-style:none;padding:0;margin:16px 0}
+ul.clean li{border:1px solid var(--border);border-left:2px solid var(--border-bright);border-radius:8px;padding:12px 16px;margin:8px 0;color:#eaeaea;font-size:16px;background:var(--surface)}
+
+footer{margin-top:80px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text-faint)}
+
+/* walkthrough */
+.walk{background:radial-gradient(800px 320px at 50% -10%,#141414,transparent 70%),var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:32px 28px;margin:24px 0}
+.walk-track{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.wnode{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:96px;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+  color:var(--text-dim);font-family:var(--sans);transition:all .2s;opacity:.55}
+.wnode:hover{opacity:.85;border-color:var(--border-bright)}
+.wnode.active{opacity:1;border-color:#6a6a6a;color:var(--text);
+  background:linear-gradient(180deg,#1a1a1a,#0e0e0e);box-shadow:0 12px 44px -22px rgba(255,255,255,.3)}
+.wnode.done{opacity:.8;border-color:var(--border-bright)}
+.wn-num{font-family:var(--mono);font-size:12px;font-weight:600;min-width:24px;height:24px;padding:0 6px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;background:#222;color:var(--text-dim)}
+.wnode.active .wn-num{background:var(--accent);color:#000}
+.wn-title{font-size:13px;font-weight:600}
+.wn-arrow{color:var(--text-faint);font-family:var(--mono)}
+.walk-detail{margin-top:24px;border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:#000;min-height:96px}
+.wd-stage{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px}
+.wd-body{margin:0;color:#eaeaea;font-size:16.5px;line-height:1.65}
+.walk-nav{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:22px}
+.wbtn{font-family:var(--mono);font-size:13px;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-bright);border-radius:9px;padding:9px 18px;cursor:pointer;transition:all .15s}
+.wbtn:hover:not(:disabled){background:#1c1c1c;border-color:#5a5a5a}
+.wbtn:disabled{opacity:.3;cursor:not-allowed}
+.wcount{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+.wcount b{color:var(--text)}
+@media(max-width:680px){.wn-arrow{display:none}.wnode{min-width:0;flex:1 1 72px}}
+
+/* diagram */
+figure.diagram{margin:24px 0 6px;padding:18px 14px 14px;background:#050505;border:1px solid var(--border);border-radius:14px}
+figure.diagram svg{width:100%;height:auto;display:block}
+figure.diagram figcaption{margin-top:14px;padding:0 8px;font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:1.6}
+.diagram [data-step]{opacity:.28;transition:opacity .25s,stroke .25s,fill .25s}
+.diagram [data-step].lit{opacity:1}
+.diagram path[data-step].lit{stroke:#fff;stroke-width:1.8}
+.diagram rect[data-step].lit{stroke:#fff;stroke-width:1.6;fill:#262626}
+
+/* TOC */
+.toc{position:fixed;top:0;left:0;width:240px;height:100vh;overflow-y:auto;
+  padding:72px 22px 40px;border-right:1px solid var(--border);background:#000;display:none;z-index:20}
+.toc-label{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+.toc a{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-dim);
+  text-decoration:none;border:none;padding:7px 0;line-height:1.45;transition:color .15s}
+.toc a:hover{color:var(--text)}
+.toc a.active{color:var(--text)}
+.toc-num{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:0 0 auto}
+.toc a.active .toc-num{color:var(--accent)}
+@media(min-width:1181px){body{padding-left:240px}.toc{display:block}}
+</style>
+
+<script>
+document.querySelectorAll('[data-walk]').forEach(function(walk){
+  var nodes   = walk.querySelectorAll('.wnode');
+  var details = walk.querySelectorAll('[data-detail]');
+  var calls   = walk.querySelectorAll('.diagram [data-step]');
+  var prev    = walk.querySelector('.wprev');
+  var next    = walk.querySelector('.wnext');
+  var count   = walk.querySelector('.wcount b');
+  var total   = nodes.length;
+  var i = 0;
+  function render(){
+    nodes.forEach(function(n,idx){
+      n.classList.toggle('active', idx===i);
+      n.classList.toggle('done', idx<i);
+    });
+    details.forEach(function(d){ d.hidden = (+d.dataset.detail !== i); });
+    calls.forEach(function(c){ c.classList.toggle('lit', +c.dataset.step === i); });
+    if(count) count.textContent = i+1;
+    prev.disabled = i===0;
+    next.disabled = i===total-1;
+  }
+  next.addEventListener('click', function(){ if(i<total-1){i++;render();} });
+  prev.addEventListener('click', function(){ if(i>0){i--;render();} });
+  nodes.forEach(function(n){ n.addEventListener('click', function(){ i=+n.dataset.i; render(); }); });
+  walk.tabIndex = 0;
+  walk.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ if(i<total-1){i++;render();} }
+    if(e.key==='ArrowLeft'){ if(i>0){i--;render();} }
+  });
+  render();
+});
+(function(){
+  var links = {};
+  document.querySelectorAll('.toc a[data-toc]').forEach(function(a){ links[a.dataset.toc] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        Object.keys(links).forEach(function(k){ links[k].classList.remove('active'); });
+        if(links[e.target.id]) links[e.target.id].classList.add('active');
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px'});
+  document.querySelectorAll('section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>

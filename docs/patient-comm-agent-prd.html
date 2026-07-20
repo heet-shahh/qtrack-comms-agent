@@ -1,0 +1,360 @@
+<nav class="toc" aria-label="Contents">
+  <div class="toc-label">Contents</div>
+  <a href="#s01" data-toc="s01"><span class="toc-num">01</span> Problem</a>
+  <a href="#s02" data-toc="s02"><span class="toc-num">02</span> Goals &amp; non-goals</a>
+  <a href="#s03" data-toc="s03"><span class="toc-num">03</span> Who it is for</a>
+  <a href="#s04" data-toc="s04"><span class="toc-num">04</span> Principles</a>
+  <a href="#s05" data-toc="s05"><span class="toc-num">05</span> The two experiences</a>
+  <a href="#s06" data-toc="s06"><span class="toc-num">06</span> Workflow catalog</a>
+  <a href="#s07" data-toc="s07"><span class="toc-num">07</span> The signature flow</a>
+  <a href="#s08" data-toc="s08"><span class="toc-num">08</span> Success metrics</a>
+  <a href="#s09" data-toc="s09"><span class="toc-num">09</span> Scope &amp; phasing</a>
+  <a href="#s10" data-toc="s10"><span class="toc-num">10</span> Open questions</a>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">qTrack · Patient Communication · PRD</div>
+    <h1>Patient Communication Agent</h1>
+    <div class="meta">
+      <span class="chip">2026-07-21</span>
+      <span class="chip">PRD · draft for review</span>
+      <span class="chip">LCS + IPN</span>
+      <span class="chip"><a href="patient-comm-agent-tech.html">Companion: Technical design →</a></span>
+    </div>
+    <p class="lede">
+      This document describes what we are building and why. It is the product requirements, not the design.
+      How it is built (architecture, the engine, the voice integration) lives in the companion technical
+      document.
+    </p>
+  </header>
+
+  <!-- 01 -->
+  <section id="s01">
+    <h2><span class="num">01</span> Problem</h2>
+    <p>
+      Blended follow-up adherence across lung screening (LCS) and incidental pulmonary nodules (IPN) at a
+      mid-size health system sits around 38 percent, against an achievable target closer to 65 percent. The gap
+      is not that the messages are poorly written. It is that no system today reliably does three things:
+    </p>
+    <ul class="clean">
+      <li>Turn a clinical or scheduling event into a tracked action that cannot silently die in an inbox.</li>
+      <li>Decide who needs to be contacted, how urgently, and whether a human is required.</li>
+      <li>Make sure the resulting effort, and its outcome, is recorded somewhere durable rather than in a navigator's memory or a spreadsheet.</li>
+    </ul>
+    <p>
+      Every missed follow-up is both a clinical-safety risk (a nodule that goes unwatched) and lost revenue (a
+      billable scan that never happens). Closing the loop is the whole job.
+    </p>
+  </section>
+
+  <!-- 02 -->
+  <section id="s02">
+    <h2><span class="num">02</span> Goals &amp; non-goals</h2>
+    <h3>Goals</h3>
+    <ul class="clean">
+      <li>Every relevant trigger becomes a tracked <b>Patient Communication Task</b> with a goal and an owner.</li>
+      <li>Low-risk, logistical outreach runs <b>automatically</b>, with no human in the loop.</li>
+      <li>Conversations that need clinical judgment are <b>navigator-led</b>, with the agent doing the prep and the documentation.</li>
+      <li>An automated interaction that goes off-script <b>hands off to a human gracefully</b>, never guessing at a clinical answer.</li>
+      <li>Every task and outcome is <b>durable and searchable</b>, per patient, across programs.</li>
+      <li>Which staff role handles what, and how each workflow behaves, is <b>configurable</b>, not hardcoded.</li>
+    </ul>
+    <h3>Non-goals (this phase)</h3>
+    <ul class="clean">
+      <li>Extracting risk from free-text radiology reports. Classification uses structured fields already available.</li>
+      <li>Unsupervised AI conducting a clinical conversation. Clinical calls stay navigator-led.</li>
+      <li>Cross-program enrollment linking, and insurance or coverage-driven triggers.</li>
+    </ul>
+  </section>
+
+  <!-- 03 -->
+  <section id="s03">
+    <h2><span class="num">03</span> Who it is for</h2>
+    <table>
+      <thead><tr><th>User</th><th>What they need</th></tr></thead>
+      <tbody>
+        <tr><td><b>Navigator</b> (nurse / care coordinator)</td><td>A short, prioritized list of who to call and why, the context to make the call well, and a fast way to log what happened. No system jargon.</td></tr>
+        <tr><td><b>Program admin / ops</b></td><td>To configure how each workflow behaves and to see what the automation is doing, without engineering help.</td></tr>
+        <tr><td><b>Patient</b> (the recipient)</td><td>Clear, brief, respectful outreach; an easy opt-out; and a real person the moment they have a question that matters.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 04 -->
+  <section id="s04">
+    <h2><span class="num">04</span> Product principles</h2>
+    <ul class="clean">
+      <li><b>Channel-agnostic.</b> The same workflow should work over text, voice, or whatever comes next. The channel is a delivery detail, not the product.</li>
+      <li><b>Goal-directed.</b> Every outreach has one clear objective and knows whether it has been met.</li>
+      <li><b>Never guess at clinical questions.</b> When a patient asks something that needs a person, the system acknowledges it and hands off, by name and with a deadline.</li>
+      <li><b>Everything is logged.</b> Whether the outcome was good or bad, the record exists. This is the audit trail that makes the safety and liability story real.</li>
+      <li><b>Configurable, not hardcoded.</b> Goals, retries, escalation rules, and next steps are settings, not code changes.</li>
+    </ul>
+  </section>
+
+  <!-- 05 -->
+  <section id="s05">
+    <h2><span class="num">05</span> The two experiences</h2>
+    <p>
+      The people who do the clinical work are not the people who configure the system, so the product has two
+      distinct experiences behind one login, gated by role.
+    </p>
+
+    <h3>Navigator (clinical)</h3>
+    <p>The requirement is that this stay simple. A navigator must be able to:</p>
+    <ul class="clean">
+      <li>See a prioritized worklist of patients who need a call, each described in one plain sentence (who, and why now).</li>
+      <li>Open a case and immediately see why it is here, the patient's own words if they asked something, and short talking points.</li>
+      <li>Log the call in one structured form, in plain language.</li>
+      <li>Never be shown internal states, workflow names, or configuration.</li>
+    </ul>
+    <p class="callout"><span class="tag">Requirement</span> A task cannot be marked done until the outcome is captured. The record is the point; a closed task with no outcome is not allowed.</p>
+
+    <h3>Admin (workflow management)</h3>
+    <p>This is where the complexity is allowed to live. An admin must be able to:</p>
+    <ul class="clean">
+      <li>Configure each workflow: its trigger, its goal, how many times to retry and how, which words escalate a case to a human, and what runs next on success.</li>
+      <li>See the whole task queue and the full event log.</li>
+      <li>See what the automation did for a patient or a panel, including tasks that never needed a human, so the automatic track is never a black box.</li>
+    </ul>
+  </section>
+
+  <!-- 06 -->
+  <section id="s06">
+    <h2><span class="num">06</span> Workflow catalog</h2>
+    <p>
+      Five workflows in this phase. Four are automatic (simple yes / no / scheduling exchanges); one is assisted
+      (an open clinical conversation).
+    </p>
+    <table>
+      <thead><tr><th>#</th><th>Workflow</th><th>Mode</th><th>Objective</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Lung-screening eligibility outreach</td><td><span class="badge b-ok">Automatic</span></td><td>Interest in a free annual scan</td></tr>
+        <tr><td>2</td><td>No-show / overdue chase</td><td><span class="badge b-ok">Automatic</span></td><td>A concrete date to reschedule</td></tr>
+        <tr><td>3</td><td>Pre-scan reminder</td><td><span class="badge b-ok">Automatic</span></td><td>Confirm attendance and prep</td></tr>
+        <tr><td>4</td><td>General appointment reminder</td><td><span class="badge b-ok">Automatic</span></td><td>Confirm attendance</td></tr>
+        <tr><td>5</td><td>New finding that needs explaining</td><td><span class="badge b-warn">Assisted</span></td><td>A navigator call, prepped and logged</td></tr>
+      </tbody>
+    </table>
+    <p class="callout"><span class="tag">The rule</span> What decides automatic vs assisted is not how serious the case is. It is whether the useful reply can be anticipated. "Does Tuesday work" has a fixed set of answers, so it is automatic. "Is this serious" cannot be scripted, so it is always assisted, even when the underlying risk is routine.</p>
+  </section>
+
+  <!-- 07 -->
+  <section id="s07">
+    <h2><span class="num">07</span> The signature flow: a patient goes off-script</h2>
+    <p>
+      This is the behaviour the whole product is judged on, so it is a requirement, not a nice-to-have. When an
+      automated message gets a reply it was not built for, the experience must follow these steps every time.
+    </p>
+
+    <div class="walk" data-walk>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Message</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Off-script reply</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Acknowledge</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Name a person</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Navigator picks up</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">1 · The automated message</div>
+        <p class="wd-body" data-detail="0">A patient gets a short, single-question reminder with an easy way to reply or opt out. Most of the time this resolves on its own, and no human is ever involved.</p>
+        <div class="wd-stage" data-detail="1" hidden>2 · A reply it was not built for</div>
+        <p class="wd-body" data-detail="1" hidden>Instead of picking an option, the patient asks something clinical, or shows worry: "why do I even need this?", "no, I can't afford it." The system must recognize this is outside what it can handle.</p>
+        <div class="wd-stage" data-detail="2" hidden>3 · Acknowledge, do not answer</div>
+        <p class="wd-body" data-detail="2" hidden>The system must not attempt a medical answer. It acknowledges the question warmly and makes clear a person will help.</p>
+        <div class="wd-stage" data-detail="3" hidden>4 · Name a person and a time</div>
+        <p class="wd-body" data-detail="3" hidden>"I'll have Sarah, your care coordinator, call you back today." A named person and a same-day promise, plus a confirmation of anything already resolved (like the appointment) so nothing feels dropped.</p>
+        <div class="wd-stage" data-detail="4" hidden>5 · It reaches the right navigator</div>
+        <p class="wd-body" data-detail="4" hidden>The case appears on the navigator's worklist with the patient's actual question visible and a same-day deadline attached. An acknowledged-but-unanswered question is a worse outcome than the original no-show, so it cannot sit.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 5</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section id="s08">
+    <h2><span class="num">08</span> Success metrics</h2>
+    <p>How we will know it is working:</p>
+    <table>
+      <thead><tr><th>Metric</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Follow-up adherence uplift vs. the pre-agent baseline</td><td>The headline outcome: are more patients completing their scans.</td></tr>
+        <tr><td>Share of automatic tasks resolved without escalation</td><td>Shows the automatic track is actually carrying load, not just deferring it.</td></tr>
+        <tr><td>Escalation rate and top reasons</td><td>Tells us whether the automatic / assisted line is drawn correctly.</td></tr>
+        <tr><td>Navigator hours per assisted task</td><td>Shows the prep and capture are saving time, not adding it.</td></tr>
+        <tr><td>Time from trigger to resolution</td><td>How long a case sits before the loop closes.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 09 -->
+  <section id="s09">
+    <h2><span class="num">09</span> Scope &amp; phasing</h2>
+    <h3>In scope now (V1)</h3>
+    <ul class="clean">
+      <li>The five workflows above, four automatic and one assisted.</li>
+      <li>The two experiences: navigator worklist and admin workflow configuration.</li>
+      <li>The off-script handoff, a per-patient history, and a full event log.</li>
+      <li>At least one patient-facing channel and the navigator worklist itself.</li>
+    </ul>
+    <h3>Later</h3>
+    <ul class="clean">
+      <li>Voice as a delivery channel for the automatic workflows, and outbound calls to real phones (which brings in phone numbers and call-recording consent).</li>
+      <li>Additional workflows and channels, and self-service configuration for non-engineering staff.</li>
+      <li>Automated recording, transcription, and AI-drafted (navigator-confirmed) call summaries for the assisted workflow.</li>
+    </ul>
+    <p class="faint" style="font-size:14px">Note: a working prototype already demonstrates the two experiences, the five workflows over text, and a real voice call. See the technical document for what is actually built.</p>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <h2><span class="num">10</span> Open questions</h2>
+    <ul class="clean">
+      <li><b>Escalation sensitivity.</b> Too loose and everything escalates, defeating the point; too tight and real concerns get missed. This probably needs a short pilot to tune rather than a guess upfront.</li>
+      <li><b>Who writes the outcome summary.</b> Pure navigator entry, or AI-drafted and navigator-confirmed? This changes both the effort and the strength of the audit record.</li>
+      <li><b>Ownership SLA.</b> For an incidental finding from an out-of-domain physician, how long before silence counts as a decline and the case falls through to a safety-net owner?</li>
+      <li><b>Reference staffing model.</b> Which site's roles do we configure against first? Whatever we pick becomes the implicit default others are compared to.</li>
+    </ul>
+  </section>
+
+  <footer>
+    patient-comm-agent-prd.html · product requirements · companion: patient-comm-agent-tech.html
+  </footer>
+
+</div>
+
+<style>
+:root{
+  --bg:#000;--surface:#0a0a0a;--surface-2:#111;--border:#262626;--border-bright:#3a3a3a;
+  --text:#f2f2f2;--text-dim:#b4b4b4;--text-faint:#8f8f8f;--accent:#fff;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:72px 28px 120px}
+h1{font-size:40px;line-height:1.12;font-weight:600;letter-spacing:-.02em;margin:0 0 22px;
+  background:linear-gradient(180deg,#fff,#9a9a9a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+h2{font-size:13px;font-family:var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--text-faint);
+  margin:0 0 28px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+h2 .num{color:var(--accent)}
+h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:30px 0 10px;color:#f2f2f2}
+section{margin:64px 0}
+p{color:#eaeaea}
+code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:#eaeaea}
+a{color:var(--text);border-bottom:1px solid var(--border-bright);text-decoration:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px}
+.chip{font-family:var(--mono);font-size:12px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:4px 12px;background:var(--surface)}
+.chip a{border:none}
+.lede{font-size:20px;line-height:1.6;color:#dadada;border-left:2px solid var(--border-bright);padding-left:18px;margin:22px 0 0}
+.callout{border:1px solid var(--border-bright);border-left:3px solid #6a6a6a;border-radius:10px;padding:18px 22px;background:var(--surface);margin:24px 0;display:block}
+.callout .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;display:block}
+.badge{font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid var(--border-bright);display:inline-block}
+.b-ok{color:#fff;background:#1c1c1c;border-color:#555}
+.b-warn{color:#c9c9c9;background:#141414;border-color:#3a3a3a;border-style:dashed}
+
+table{width:100%;border-collapse:collapse;margin:22px 0;font-size:15.5px}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border-bright);vertical-align:bottom}
+td{padding:11px 12px;border-bottom:1px solid var(--border);color:#eaeaea;vertical-align:top;line-height:1.55}
+
+ul.clean{list-style:none;padding:0;margin:16px 0}
+ul.clean li{border:1px solid var(--border);border-left:2px solid var(--border-bright);border-radius:8px;padding:12px 16px;margin:8px 0;color:#eaeaea;font-size:16px;background:var(--surface)}
+
+footer{margin-top:80px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text-faint)}
+
+/* walkthrough */
+.walk{background:radial-gradient(800px 320px at 50% -10%,#141414,transparent 70%),var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:32px 28px;margin:24px 0}
+.walk-track{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.wnode{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:96px;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+  color:var(--text-dim);font-family:var(--sans);transition:all .2s;opacity:.55}
+.wnode:hover{opacity:.85;border-color:var(--border-bright)}
+.wnode.active{opacity:1;border-color:#6a6a6a;color:var(--text);
+  background:linear-gradient(180deg,#1a1a1a,#0e0e0e);box-shadow:0 12px 44px -22px rgba(255,255,255,.3)}
+.wnode.done{opacity:.8;border-color:var(--border-bright)}
+.wn-num{font-family:var(--mono);font-size:12px;font-weight:600;min-width:24px;height:24px;padding:0 6px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;background:#222;color:var(--text-dim)}
+.wnode.active .wn-num{background:var(--accent);color:#000}
+.wn-title{font-size:13px;font-weight:600}
+.wn-arrow{color:var(--text-faint);font-family:var(--mono)}
+.walk-detail{margin-top:24px;border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:#000;min-height:96px}
+.wd-stage{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px}
+.wd-body{margin:0;color:#eaeaea;font-size:16.5px;line-height:1.65}
+.walk-nav{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:22px}
+.wbtn{font-family:var(--mono);font-size:13px;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-bright);border-radius:9px;padding:9px 18px;cursor:pointer;transition:all .15s}
+.wbtn:hover:not(:disabled){background:#1c1c1c;border-color:#5a5a5a}
+.wbtn:disabled{opacity:.3;cursor:not-allowed}
+.wcount{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+.wcount b{color:var(--text)}
+@media(max-width:680px){.wn-arrow{display:none}.wnode{min-width:0;flex:1 1 72px}}
+
+/* TOC */
+.toc{position:fixed;top:0;left:0;width:240px;height:100vh;overflow-y:auto;
+  padding:72px 22px 40px;border-right:1px solid var(--border);background:#000;display:none;z-index:20}
+.toc-label{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+.toc a{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-dim);
+  text-decoration:none;border:none;padding:7px 0;line-height:1.45;transition:color .15s}
+.toc a:hover{color:var(--text)}
+.toc a.active{color:var(--text)}
+.toc-num{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:0 0 auto}
+.toc a.active .toc-num{color:var(--accent)}
+@media(min-width:1181px){body{padding-left:240px}.toc{display:block}}
+</style>
+
+<script>
+document.querySelectorAll('[data-walk]').forEach(function(walk){
+  var nodes   = walk.querySelectorAll('.wnode');
+  var details = walk.querySelectorAll('[data-detail]');
+  var prev    = walk.querySelector('.wprev');
+  var next    = walk.querySelector('.wnext');
+  var count   = walk.querySelector('.wcount b');
+  var total   = nodes.length;
+  var i = 0;
+  function render(){
+    nodes.forEach(function(n,idx){
+      n.classList.toggle('active', idx===i);
+      n.classList.toggle('done', idx<i);
+    });
+    details.forEach(function(d){ d.hidden = (+d.dataset.detail !== i); });
+    if(count) count.textContent = i+1;
+    prev.disabled = i===0;
+    next.disabled = i===total-1;
+  }
+  next.addEventListener('click', function(){ if(i<total-1){i++;render();} });
+  prev.addEventListener('click', function(){ if(i>0){i--;render();} });
+  nodes.forEach(function(n){ n.addEventListener('click', function(){ i=+n.dataset.i; render(); }); });
+  walk.tabIndex = 0;
+  walk.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ if(i<total-1){i++;render();} }
+    if(e.key==='ArrowLeft'){ if(i>0){i--;render();} }
+  });
+  render();
+});
+(function(){
+  var links = {};
+  document.querySelectorAll('.toc a[data-toc]').forEach(function(a){ links[a.dataset.toc] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        Object.keys(links).forEach(function(k){ links[k].classList.remove('active'); });
+        if(links[e.target.id]) links[e.target.id].classList.add('active');
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px'});
+  document.querySelectorAll('section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>
