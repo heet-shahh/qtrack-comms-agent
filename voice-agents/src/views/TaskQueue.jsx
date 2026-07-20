@@ -1,15 +1,15 @@
 import React, { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { PLAYBOOKS } from '../data/playbooks'
 import TaskRow from '../components/TaskRow'
 
 export default function TaskQueue() {
   const tasks = Object.values(useStore((s) => s.tasks))
+  const playbooks = useStore((s) => s.playbooks)
   const [track, setTrack] = useState('all')
   const [state, setState] = useState('all')
 
   const filtered = tasks
-    .filter((t) => track === 'all' || PLAYBOOKS[t.playbookId].tier === track)
+    .filter((t) => track === 'all' || playbooks[t.playbookId].tier === track)
     .filter((t) => state === 'all' || (state === 'active' ? ['created', 'queued', 'in_progress'].includes(t.state) : t.state === state))
     .sort((a, b) => new Date(b.stageEnteredAt) - new Date(a.stageEnteredAt))
 

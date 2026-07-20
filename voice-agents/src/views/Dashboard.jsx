@@ -1,16 +1,16 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
-import { PLAYBOOKS } from '../data/playbooks'
 import TaskRow from '../components/TaskRow'
 import { timeAgo } from '../components/common'
 
 export default function Dashboard() {
   const tasks = Object.values(useStore((s) => s.tasks))
+  const playbooks = useStore((s) => s.playbooks)
   const events = useStore((s) => s.events)
   const setView = useStore((s) => s.setView)
 
   const active = tasks.filter((t) => ['created', 'queued', 'in_progress'].includes(t.state))
-  const autoTasks = tasks.filter((t) => PLAYBOOKS[t.playbookId].tier === 'automatic')
+  const autoTasks = tasks.filter((t) => playbooks[t.playbookId].tier === 'automatic')
   const completed = tasks.filter((t) => t.state === 'completed')
   const escalated = tasks.filter((t) => t.state === 'escalated')
   const resolvedNoEsc = autoTasks.length ? Math.round((autoTasks.filter((t) => t.state === 'completed').length / autoTasks.length) * 100) : 0

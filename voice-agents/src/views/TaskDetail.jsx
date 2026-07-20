@@ -1,6 +1,5 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
-import { PLAYBOOKS } from '../data/playbooks'
 import { SMBar, TierPill, timeAgo, OutcomePill } from '../components/common'
 import Conversation from '../components/Conversation'
 import TalkTrack from '../components/TalkTrack'
@@ -18,8 +17,8 @@ export default function TaskDetail() {
   const retry = useStore((s) => s.retry)
   const escalate = useStore((s) => s.escalate)
 
+  const pb = useStore((s) => (task ? s.playbooks[task.playbookId] : null))
   if (!task) return <div className="empty">Task not found.</div>
-  const pb = PLAYBOOKS[task.playbookId]
   const assisted = pb.tier === 'assisted'
   const taskEvents = events.filter((e) => e.taskId === task.id)
 

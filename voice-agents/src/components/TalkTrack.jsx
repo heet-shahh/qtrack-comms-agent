@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { CAPTURE_FIELDS, PLAYBOOKS } from '../data/playbooks'
+import { CAPTURE_FIELDS } from '../data/playbooks'
 
 export default function TalkTrack({ task }) {
   const patient = useStore((s) => s.patients[task.patientId])
@@ -11,7 +11,6 @@ export default function TalkTrack({ task }) {
   const confirmCapture = useStore((s) => s.confirmCapture)
   const [cap, setCap] = useState(task.capture || {})
 
-  const pb = PLAYBOOKS[task.playbookId]
   const navName = task.assignedNavigator ? navigators[task.assignedNavigator].name : '—'
 
   const setField = (k, v) => {

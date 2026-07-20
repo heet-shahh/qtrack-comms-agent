@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice Agent Platform Selection · qTrack</title>
+<style>
+:root{
+  --bg:#000;--surface:#0a0a0a;--surface-2:#111;--border:#262626;--border-bright:#3a3a3a;
+  --text:#f2f2f2;--text-dim:#b4b4b4;--text-faint:#8f8f8f;--accent:#fff;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:72px 28px 120px}
+h1{font-size:40px;line-height:1.12;font-weight:600;letter-spacing:-.02em;margin:0 0 22px;
+  background:linear-gradient(180deg,#fff,#9a9a9a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+h2{font-size:13px;font-family:var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--text-faint);
+  margin:0 0 24px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+h2 .num{color:var(--accent)}
+h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:30px 0 10px}
+section{margin:60px 0}
+p{color:#eaeaea}
+code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:#eaeaea}
+a{color:var(--text);border-bottom:1px solid var(--border-bright);text-decoration:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px}
+.chip{font-family:var(--mono);font-size:12px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:4px 12px;background:var(--surface)}
+.lede{font-size:20px;line-height:1.6;color:#dadada;border-left:2px solid var(--border-bright);padding-left:18px;margin:22px 0 0}
+.callout{border:1px solid var(--border-bright);border-left:3px solid #6a6a6a;border-radius:10px;padding:16px 20px;background:var(--surface);margin:22px 0;color:#eaeaea;font-size:16.5px}
+.callout .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px}
+.badge{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid var(--border-bright);display:inline-block;white-space:nowrap}
+.b-ok{color:#fff;background:#1c1c1c;border-color:#555}
+.b-warn{color:#c9c9c9;background:#141414;border-color:#3a3a3a;border-style:dashed}
+.b-bad{color:#8a8a8a;background:#0d0d0d;border-color:#2a2a2a}
+
+.table-scroll{overflow-x:auto;margin:22px 0}
+table{width:100%;border-collapse:collapse;font-size:15.5px;min-width:640px}
+th{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-faint);padding:11px 12px;border-bottom:1px solid var(--border-bright);vertical-align:bottom}
+td{padding:11px 12px;border-bottom:1px solid var(--border);color:#eaeaea;vertical-align:top;line-height:1.5}
+td.rowlab{font-family:var(--mono);font-size:12px;color:var(--text-dim);white-space:nowrap}
+td.win{background:#0d0d0d}
+tr:hover td{background:#080808}
+
+ul.clean{list-style:none;padding:0;margin:16px 0}
+ul.clean li{border:1px solid var(--border);border-left:2px solid var(--border-bright);border-radius:8px;padding:12px 16px;margin:8px 0;color:#eaeaea;font-size:16.5px;background:var(--surface)}
+ul.clean li b{color:#fff}
+
+.shift{display:flex;flex-direction:column;gap:8px;margin:20px 0}
+.shift-row{display:grid;grid-template-columns:1fr 34px 1.5fr;align-items:center;gap:6px;border:1px solid var(--border);border-radius:9px;padding:11px 16px;background:var(--surface)}
+.shift-row .from{color:var(--text-dim);font-size:15.5px}
+.shift-row .arw{color:var(--text-faint);font-family:var(--mono);text-align:center}
+.shift-row .to{color:#f2f2f2;font-size:15.5px}
+
+footer{margin-top:80px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--text-faint)}
+.src{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-top:14px}
+.src a{display:block;font-size:14px;color:#eaeaea;border:none;padding:6px 0;border-bottom:1px solid var(--border)}
+.src a span{font-family:var(--mono);font-size:11px;color:var(--text-faint);display:block}
+@media(max-width:680px){.src{grid-template-columns:1fr}h1{font-size:30px}}
+
+/* walkthrough */
+.walk{background:radial-gradient(800px 320px at 50% -10%,#141414,transparent 70%),var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:32px 28px;margin:22px 0}
+.walk-track{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.wnode{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:104px;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
+  color:var(--text-dim);font-family:var(--sans);transition:all .2s;opacity:.55}
+.wnode:hover{opacity:.85;border-color:var(--border-bright)}
+.wnode.active{opacity:1;border-color:#6a6a6a;color:var(--text);
+  background:linear-gradient(180deg,#1a1a1a,#0e0e0e);box-shadow:0 12px 44px -22px rgba(255,255,255,.3)}
+.wnode.done{opacity:.8;border-color:var(--border-bright)}
+.wn-num{font-family:var(--mono);font-size:12px;font-weight:600;min-width:24px;height:24px;padding:0 6px;border-radius:7px;
+  display:inline-flex;align-items:center;justify-content:center;background:#222;color:var(--text-dim)}
+.wnode.active .wn-num{background:var(--accent);color:#000}
+.wn-title{font-size:13px;font-weight:600;text-align:center}
+.wn-arrow{color:var(--text-faint);font-family:var(--mono)}
+.walk-detail{margin-top:24px;border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:#000;min-height:92px}
+.wd-stage{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px}
+.wd-body{margin:0;color:#eaeaea;font-size:16.5px;line-height:1.6}
+.walk-nav{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:22px}
+.wbtn{font-family:var(--mono);font-size:13px;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-bright);border-radius:9px;padding:9px 18px;cursor:pointer;transition:all .15s}
+.wbtn:hover:not(:disabled){background:#1c1c1c;border-color:#5a5a5a}
+.wbtn:disabled{opacity:.3;cursor:not-allowed}
+.wcount{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+.wcount b{color:var(--text)}
+@media(max-width:680px){.wn-arrow{display:none}.wnode{min-width:0;flex:1 1 72px}}
+
+figure.diagram{margin:22px 0 6px;padding:18px 14px 14px;background:#050505;border:1px solid var(--border);border-radius:14px}
+figure.diagram svg{width:100%;height:auto;display:block}
+figure.diagram figcaption{margin-top:14px;padding:0 8px;font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:1.6}
+.diagram [data-step]{opacity:.28;transition:opacity .25s,stroke .25s,fill .25s}
+.diagram [data-step].lit{opacity:1}
+.diagram path[data-step].lit{stroke:#fff;stroke-width:1.9}
+.diagram rect[data-step].lit{stroke:#fff;stroke-width:1.7;fill:#262626}
+
+.toc{position:fixed;top:0;left:0;width:240px;height:100vh;overflow-y:auto;
+  padding:72px 22px 40px;border-right:1px solid var(--border);background:#000;display:none;z-index:20}
+.toc-label{font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--text-faint);margin-bottom:18px}
+.toc a{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--text-dim);
+  text-decoration:none;border:none;padding:7px 0;line-height:1.45;transition:color .15s}
+.toc a:hover{color:var(--text)}
+.toc a.active{color:var(--text)}
+.toc-num{font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:0 0 auto}
+.toc a.active .toc-num{color:var(--accent)}
+@media(min-width:1181px){body{padding-left:240px}.toc{display:block}}
+</style>
+</head>
+<body>
+
+<nav class="toc" aria-label="Contents">
+  <div class="toc-label">Contents</div>
+  <a href="#s01" data-toc="s01"><span class="toc-num">01</span> Verdict</a>
+  <a href="#s02" data-toc="s02"><span class="toc-num">02</span> What we're choosing</a>
+  <a href="#s03" data-toc="s03"><span class="toc-num">03</span> The call path</a>
+  <a href="#s04" data-toc="s04"><span class="toc-num">04</span> Comparison matrix</a>
+  <a href="#s05" data-toc="s05"><span class="toc-num">05</span> HIPAA &amp; compliance</a>
+  <a href="#s06" data-toc="s06"><span class="toc-num">06</span> Cost &amp; latency</a>
+  <a href="#s07" data-toc="s07"><span class="toc-num">07</span> Plugging into the POC</a>
+  <a href="#s08" data-toc="s08"><span class="toc-num">08</span> Evidence &amp; sources</a>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">qTrack · Patient Communication Agent · Vendor Evaluation</div>
+    <h1>Voice Agent Platform Selection</h1>
+    <div class="meta">
+      <span class="chip">2026-07-20</span>
+      <span class="chip">Team 4</span>
+      <span class="chip">Retell · Vapi · ElevenLabs · Bland</span>
+      <span class="chip">Decision doc</span>
+    </div>
+    <p class="lede">
+      We evaluated the voice platforms for placing the automatic patient calls (Track A) and the warm
+      handoff to a navigator (the fallout escalation). The recommendation is Retell as the platform, with
+      ElevenLabs as the voice inside it. This doc gives the reasoning, the numbers, and how it drops into the
+      POC we already built, so anyone on the team can act on it without re-running the research.
+    </p>
+  </header>
+
+  <!-- 01 -->
+  <section id="s01">
+    <h2><span class="num">01</span> Verdict</h2>
+    <p>
+      For a clinical build that must handle PHI and ship fast, the choice is not close. Three requirements
+      decide it, and Retell is cleanest on all three: a Business Associate Agreement with no friction, letting
+      our own engine drive the conversation, and a warm transfer to a named navigator.
+    </p>
+    <ul class="clean">
+      <li><b>Primary: Retell.</b> Native phone calling (SIP/PSTN), self-serve BAA on standard plans, warm transfer with full context, and a custom-LLM websocket so our state machine drives. Its voice is ElevenLabs under the hood anyway.</li>
+      <li><b>Strong second: Vapi.</b> Pick it only if owning and swapping every component matters more than time-to-ship and included compliance. HIPAA is a fixed paid add-on and it needs a backend engineer to tune.</li>
+      <li><b>ElevenLabs: the voice, not the platform.</b> Best-sounding, but it has no phone-first telephony (you bolt on Twilio) and no BAA below Enterprise. We get its voice for free by choosing Retell.</li>
+      <li><b>Bland: Track A overflow only.</b> Cheapest at high volume, but the weakest compliance story, so never for anything touching a finding.</li>
+    </ul>
+    <div class="callout">
+      <div class="tag">The false binary to retire</div>
+      "Retell vs ElevenLabs" is not a real choice. Retell runs ElevenLabs TTS as its voice engine, so picking
+      Retell gets us the best voice and the telephony, compliance, and transfer plumbing we would otherwise
+      build ourselves.
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section id="s02">
+    <h2><span class="num">02</span> What we're actually choosing</h2>
+    <p>
+      We already built the brain: the interpret step, the playbooks, the state machine. So we are not shopping
+      for a "chatbot that decides what to say." We need a platform that supplies the parts we do not want to
+      build (telephony, speech-to-text, text-to-speech, turn-taking) and then gets out of the way so our engine
+      runs the dialogue. That reframes the whole comparison around four criteria.
+    </p>
+    <div class="shift">
+      <div class="shift-row"><div class="from">Frictionless BAA (handle PHI day one)</div><div class="arw">→</div><div class="to">rules out add-on and enterprise-gated tiers for the POC</div></div>
+      <div class="shift-row"><div class="from">Our brain drives via custom-LLM endpoint</div><div class="arw">→</div><div class="to">platform must expose a websocket / BYO-LLM hook</div></div>
+      <div class="shift-row"><div class="from">Warm transfer to a named navigator</div><div class="arw">→</div><div class="to">this is our fallout handoff, must carry context</div></div>
+      <div class="shift-row"><div class="from">Native phone calling, no stitching</div><div class="arw">→</div><div class="to">SIP/PSTN as a first-class primitive, not a Twilio guide</div></div>
+    </div>
+    <div class="callout">
+      <div class="tag">A design point that shrinks the requirement</div>
+      Our architecture already routes every open-clinical conversation to a human navigator. The voice agent
+      only ever runs binary-logistics Track A calls plus the escalation handoff. So we do not need a
+      clinical-safety-tuned model (that is Hippocratic AI's pitch), because the agent never has the risky
+      conversation. That narrows the field to exactly what Retell does best, and defers the expensive
+      clinical-native platforms.
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section id="s03">
+    <h2><span class="num">03</span> The call path</h2>
+    <p>
+      This is what a live Track A call looks like on Retell, and why the fit is exact: the platform owns the
+      phone and the speech, our existing brain owns the decision, and the fallout branch becomes a native warm
+      transfer. Step through it.
+    </p>
+
+    <div class="walk" data-walk>
+      <figure class="diagram">
+        <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="voice call path: telephony, speech-to-text, our brain, text-to-speech, patient, warm transfer">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8f8f8f"/></marker>
+          </defs>
+          <g font-family="SF Mono,monospace" font-size="11">
+            <rect data-step="0" x="16"  y="98"  width="118" height="44" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="75"  y="120" text-anchor="middle" fill="#eaeaea">patient</text><text x="75" y="133" text-anchor="middle" fill="#8f8f8f">phone (PSTN)</text>
+            <rect data-step="1" x="176" y="98"  width="118" height="44" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="235" y="120" text-anchor="middle" fill="#eaeaea">Retell STT</text><text x="235" y="133" text-anchor="middle" fill="#8f8f8f">speech to text</text>
+            <rect data-step="2" x="336" y="20"  width="150" height="46" rx="8" fill="#1c1c1c" stroke="#fff" stroke-width="1.4"/><text x="411" y="42" text-anchor="middle" fill="#fff">OUR BRAIN</text><text x="411" y="56" text-anchor="middle" fill="#cfcfcf">interpret + state machine</text>
+            <rect data-step="3" x="336" y="98"  width="118" height="44" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="395" y="120" text-anchor="middle" fill="#eaeaea">TTS</text><text x="395" y="133" text-anchor="middle" fill="#8f8f8f">ElevenLabs</text>
+            <rect data-step="4" x="336" y="188" width="150" height="42" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="411" y="213" text-anchor="middle" fill="#eaeaea">event log + next task</text>
+            <rect data-step="5" x="540" y="98"  width="150" height="44" rx="8" fill="#1c1c1c" stroke="#3a3a3a"/><text x="615" y="120" text-anchor="middle" fill="#eaeaea">navigator</text><text x="615" y="133" text-anchor="middle" fill="#8f8f8f">warm transfer</text>
+          </g>
+          <g fill="none" stroke="#666" stroke-width="1.4" marker-end="url(#arr)">
+            <path data-step="0" d="M134,120 L172,120"/>
+            <path data-step="1" d="M294,112 C316,112 316,52 332,48"/>
+            <path data-step="2" d="M411,66 L403,94" stroke="#fff"/>
+            <path data-step="3" d="M336,124 C300,150 180,150 135,140"/>
+            <path data-step="4" d="M411,142 L411,186"/>
+            <path data-step="5" d="M486,44 C560,44 615,70 615,94"/>
+          </g>
+        </svg>
+        <figcaption>The platform owns the phone and the speech; our brain owns the decision; fallout becomes a native warm transfer with context to the navigator.</figcaption>
+      </figure>
+
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Call placed</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Transcribe</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Our brain</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Speak</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Matched</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="5"><span class="wn-num">6</span><span class="wn-title">Or transfer</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">Step 1 · Retell places the call</div>
+        <p class="wd-body" data-detail="0">Retell dials the patient over native SIP/PSTN. No Twilio account to stitch, no separate telephony vendor. This is the piece we most want to not build.</p>
+        <div class="wd-stage" data-detail="1" hidden>Step 2 · Speech to text</div>
+        <p class="wd-body" data-detail="1" hidden>The patient speaks; Retell's built-in turn-taking and STT convert it to a transcript in real time, holding a steady round-trip so the caller does not feel the machine.</p>
+        <div class="wd-stage" data-detail="2" hidden>Step 3 · Our brain decides (unchanged from the POC)</div>
+        <p class="wd-body" data-detail="2" hidden>Retell streams the transcript over a custom-LLM websocket to our endpoint. That endpoint is the exact <code>interpret()</code> plus state machine from the POC. It returns the next line and the structured outcome. The dialogue policy is ours, not the vendor's.</p>
+        <div class="wd-stage" data-detail="3" hidden>Step 4 · Text to speech</div>
+        <p class="wd-body" data-detail="3" hidden>Our reply is spoken back through ElevenLabs voices, which Retell runs as its TTS engine. Best-in-class voice, no separate contract.</p>
+        <div class="wd-stage" data-detail="4" hidden>Step 5 · Matched outcome</div>
+        <p class="wd-body" data-detail="4" hidden>On a clean match (a captured date, a confirmation), our backend writes the event-log row and spawns the next task, identical to the Slack path. The channel changed; the engine did not.</p>
+        <div class="wd-stage" data-detail="5" hidden>Step 6 · The other branch: warm transfer</div>
+        <p class="wd-body" data-detail="5" hidden>On fallout or a barrier signal, our brain triggers Retell's warm transfer to the assigned navigator, carrying the captured question as context. This is our three-move handoff, delivered natively instead of as a Slack card.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 6</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section id="s04">
+    <h2><span class="num">04</span> Comparison matrix</h2>
+    <p>Scored against the four criteria that matter for our build. Solid badge = strong fit, dashed = caveat, dim = weak.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th></th><th>Retell</th><th>Vapi</th><th>ElevenLabs Conv. AI</th><th>Bland</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rowlab">Positioning</td>
+            <td>End-to-end voice-agent platform, absorbs the stack</td>
+            <td>Orchestration layer, you wire the providers</td>
+            <td>Full-stack voice, TTS-first</td>
+            <td>Outbound-first, end-to-end</td>
+          </tr>
+          <tr>
+            <td class="rowlab">Native telephony</td>
+            <td class="win"><span class="badge b-ok">SIP / PSTN built in</span></td>
+            <td><span class="badge b-warn">via Twilio / Vonage</span></td>
+            <td><span class="badge b-bad">bolt on Twilio / SIP</span></td>
+            <td><span class="badge b-ok">built in, outbound</span></td>
+          </tr>
+          <tr>
+            <td class="rowlab">Our brain drives (BYO-LLM)</td>
+            <td class="win"><span class="badge b-ok">custom LLM on PAYG</span></td>
+            <td><span class="badge b-ok">core feature</span></td>
+            <td><span class="badge b-ok">websocket custom LLM</span></td>
+            <td><span class="badge b-warn">scripts, less flexible</span></td>
+          </tr>
+          <tr>
+            <td class="rowlab">Warm transfer w/ context</td>
+            <td class="win"><span class="badge b-ok">native, context carry</span></td>
+            <td><span class="badge b-warn">supported</span></td>
+            <td><span class="badge b-bad">integration, thin</span></td>
+            <td><span class="badge b-warn">call transfer</span></td>
+          </tr>
+          <tr>
+            <td class="rowlab">HIPAA / BAA</td>
+            <td class="win"><span class="badge b-ok">self-serve, standard plans*</span></td>
+            <td><span class="badge b-warn">~$1k/mo add-on</span></td>
+            <td><span class="badge b-bad">Enterprise only</span></td>
+            <td><span class="badge b-bad">standard/enterprise, telephony compliance weak</span></td>
+          </tr>
+          <tr>
+            <td class="rowlab">Real cost / min</td>
+            <td>~$0.07 base, ~$0.13&ndash;0.31 loaded</td>
+            <td>~$0.05 fee, ~$0.13&ndash;0.33 loaded</td>
+            <td>~$0.08&ndash;0.10 voice included</td>
+            <td>~$0.09&ndash;0.14 all-in</td>
+          </tr>
+          <tr>
+            <td class="rowlab">Latency</td>
+            <td>~620ms consistent default</td>
+            <td>400&ndash;800ms, ~550ms tuned</td>
+            <td>&lt;100ms TTS, full call gated by LLM hop</td>
+            <td>~800ms</td>
+          </tr>
+          <tr>
+            <td class="rowlab">Best-fit for us</td>
+            <td class="win"><span class="badge b-ok">primary</span></td>
+            <td><span class="badge b-warn">if max control</span></td>
+            <td><span class="badge b-warn">the voice layer</span></td>
+            <td><span class="badge b-bad">Track A overflow</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:15px;color:var(--text-dim)">* One dissenting factor on Retell's BAA tier is discussed in section 05. Verify directly before signing.</p>
+  </section>
+
+  <!-- 05 -->
+  <section id="s05">
+    <h2><span class="num">05</span> HIPAA &amp; compliance</h2>
+    <p>
+      This is the deciding factor for a clinical POC, and it is also where public sources disagree most, so it
+      is worth stating precisely rather than as a single verdict.
+    </p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Platform</th><th>BAA availability</th><th>Extra cost</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="rowlab">Retell</td>
+            <td>Self-serve BAA, sign in the dashboard</td>
+            <td>No add-on fee on standard / pay-as-you-go</td>
+            <td>PII redaction is a ~$0.01/min surcharge; countersign often within a business day.</td>
+          </tr>
+          <tr>
+            <td class="rowlab">Vapi</td>
+            <td>Zero-Data-Retention mode with BAA</td>
+            <td>~$1,000/mo add-on (one older source says $2,000)</td>
+            <td>Flat fixed cost regardless of volume; hard to justify pre-revenue.</td>
+          </tr>
+          <tr>
+            <td class="rowlab">ElevenLabs</td>
+            <td>BAA on Enterprise contract</td>
+            <td>Custom enterprise pricing</td>
+            <td>A $99/mo Pro user must jump to a negotiated contract for a BAA.</td>
+          </tr>
+          <tr>
+            <td class="rowlab">Bland</td>
+            <td>Included in standard pricing (per Bland)</td>
+            <td>No surcharge claimed</td>
+            <td>But described elsewhere as not designed for telephony-compliance workflows.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <div class="tag">The one honest conflict on Retell</div>
+      Most sources (including an independent tester and Retell's own detailed BAA doc) say the self-serve BAA is
+      available on standard / pay-as-you-go plans at no extra fee. A minority (one dev writeup, and a competitor's
+      pricing blog) claim Retell restricts HIPAA to Enterprise. The weight of evidence favors self-serve, but this
+      is exactly the kind of term that changes quietly, so confirm with Retell's security team in writing before
+      we put PHI through it.
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section id="s06">
+    <h2><span class="num">06</span> Cost &amp; latency</h2>
+    <p>
+      The headline per-minute numbers are misleading on Vapi in particular: the $0.05 is only the platform fee,
+      and real production cost lands far higher once speech, model, and telephony are stacked on. The figures
+      below are loaded (all-in) production estimates from 2026 sources.
+    </p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Platform</th><th>Headline</th><th>Loaded production</th><th>Latency (end to end)</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td class="rowlab">Retell</td><td>$0.07/min base</td><td>$0.13&ndash;0.31/min</td><td>~620ms, low jitter</td><td>Own turn-taking model, one bundled stack.</td></tr>
+          <tr><td class="rowlab">Vapi</td><td>$0.05/min fee</td><td>$0.13&ndash;0.33/min</td><td>400&ndash;800ms, ~550ms tuned</td><td>Sum of separate STT + LLM + TTS + Twilio bills.</td></tr>
+          <tr><td class="rowlab">ElevenLabs</td><td>$0.08&ndash;0.10/min</td><td>+ telephony you add</td><td>&lt;100ms TTS</td><td>Voice is fast; full-call latency set by your LLM hop.</td></tr>
+          <tr><td class="rowlab">Bland</td><td>base + usage</td><td>$0.09&ndash;0.14/min</td><td>~800ms</td><td>Cheapest all-in at high outbound volume.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <div class="tag">Reading the numbers</div>
+      Under 800ms is the threshold where callers stop noticing they are talking to a machine. Retell's ~620ms
+      out of the box, with no tuning, is the practical win for us; Vapi can beat it but only with a hand-tuned
+      Deepgram plus fast-LLM plus Cartesia stack that we would own and maintain.
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section id="s07">
+    <h2><span class="num">07</span> Plugging into the POC</h2>
+    <p>
+      The migration is small on purpose. The POC was built with the channel as a swappable adapter, so voice is
+      a new adapter, not a rebuild. Here is the whole path.
+    </p>
+    <div class="walk" data-walk>
+      <div class="walk-track">
+        <button class="wnode" data-i="0"><span class="wn-num">1</span><span class="wn-title">Keep the brain</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="1"><span class="wn-num">2</span><span class="wn-title">Add adapter</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="2"><span class="wn-num">3</span><span class="wn-title">Wire websocket</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="3"><span class="wn-num">4</span><span class="wn-title">Wire transfer</span></button>
+        <span class="wn-arrow">→</span>
+        <button class="wnode" data-i="4"><span class="wn-num">5</span><span class="wn-title">Sign + flip</span></button>
+      </div>
+      <div class="walk-detail">
+        <div class="wd-stage" data-detail="0">Step 1 · Keep the brain untouched</div>
+        <p class="wd-body" data-detail="0">The <code>interpret()</code> function, the playbooks, the state machine, and the event log stay exactly as they are. This is the whole point of the seam we built.</p>
+        <div class="wd-stage" data-detail="1" hidden>Step 2 · Add a VoiceAdapter</div>
+        <p class="wd-body" data-detail="1" hidden>Implement the same interface as the Slack adapter (a way to start a turn and a callback for the patient's reply). It just speaks to Retell instead of Slack.</p>
+        <div class="wd-stage" data-detail="2" hidden>Step 3 · Point Retell at our endpoint</div>
+        <p class="wd-body" data-detail="2" hidden>Configure Retell's custom-LLM websocket to call our brain endpoint. Every transcript turn now flows into the same logic that drove the text demo.</p>
+        <div class="wd-stage" data-detail="3" hidden>Step 4 · Route fallout to warm transfer</div>
+        <p class="wd-body" data-detail="3" hidden>Where the POC posted a Slack card on escalation, the voice path calls Retell's warm-transfer API with the captured question as context. Same escalation logic, native delivery.</p>
+        <div class="wd-stage" data-detail="4" hidden>Step 5 · Sign the BAA, flip the flag</div>
+        <p class="wd-body" data-detail="4" hidden>Sign the BAA, enable PII redaction, set short recording retention, then set the channel config to <code>voice</code>. Track A calls now go out by phone; nothing else in the system changes.</p>
+      </div>
+      <div class="walk-nav">
+        <button class="wbtn wprev">← Back</button>
+        <span class="wcount"><b>1</b> / 5</span>
+        <button class="wbtn wnext">Next →</button>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="tag">Recommended next step</div>
+      Scaffold a <code>RetellVoiceAdapter</code> stub into the POC now (same interface as the Slack adapter, with
+      a mocked warm transfer), so the voice path is real in the codebase and switchable at a config flag well
+      before we sign anything.
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section id="s08">
+    <h2><span class="num">08</span> Evidence &amp; sources</h2>
+    <p>
+      Read the sources with one caveat in mind: this category's search results are dominated by affiliate and
+      vendor content, and several "independent" comparison sites are themselves voice-AI vendors. We only kept
+      structural facts that repeat across parties with no shared interest, and we confirmed the telephony and
+      custom-LLM claims against ElevenLabs' own documentation. Verdicts from vendor blogs were discounted; the
+      one open conflict (Retell's BAA tier) is flagged in section 05.
+    </p>
+    <div class="src">
+      <a href="https://elevenlabs.io/docs/eleven-agents/phone-numbers/twilio-integration/custom-llm-integration"><span>ElevenLabs docs (primary)</span>Custom LLM via websocket + Twilio telephony</a>
+      <a href="https://voiceai.guide/hipaa/"><span>voiceai.guide (independent test)</span>3 HIPAA-compliant voice AI platforms tested</a>
+      <a href="https://telnyx.com/resources/ai-agent-comparison"><span>Telnyx (neutral telephony vendor)</span>ElevenLabs vs Vapi agent comparison</a>
+      <a href="https://andrew.ooo/answers/gpt-live-vs-elevenlabs-conversational-vs-retell-voice-agents-july-2026/"><span>andrew.ooo (July 2026)</span>Native SIP/PSTN, warm transfer, BYO-LLM by platform</a>
+      <a href="https://menuagentic.com/blogs/elevenlabs-vs-vapi-vs-retell-vs-openai-gpt-realtime"><span>menuagentic</span>Telephony as first-class primitive; warm transfer</a>
+      <a href="https://www.silverthreadlabs.com/blog/ai-voice-agent-platforms-compared"><span>silverthreadlabs</span>HIPAA add-on vs included comparison</a>
+      <a href="https://www.digitalapplied.com/blog/voice-ai-agents-business-elevenlabs-vapi-retell-bland"><span>digitalapplied</span>Loaded pricing, telephony, compliance table</a>
+      <a href="https://www.bland.ai/blog/voice-ai-pricing-enterprise"><span>Bland (competitor view)</span>Enterprise pricing and HIPAA line items</a>
+    </div>
+  </section>
+
+  <footer>
+    voice-platform-selection.html · self-contained OLED doc · shareable, works offline
+  </footer>
+</div>
+
+<script>
+document.querySelectorAll('[data-walk]').forEach(function(walk){
+  var nodes   = walk.querySelectorAll('.wnode');
+  var details = walk.querySelectorAll('[data-detail]');
+  var calls   = walk.querySelectorAll('.diagram [data-step]');
+  var prev    = walk.querySelector('.wprev');
+  var next    = walk.querySelector('.wnext');
+  var count   = walk.querySelector('.wcount b');
+  var total   = nodes.length;
+  var i = 0;
+  function render(){
+    nodes.forEach(function(n,idx){
+      n.classList.toggle('active', idx===i);
+      n.classList.toggle('done', idx<i);
+    });
+    details.forEach(function(d){ d.hidden = (+d.dataset.detail !== i); });
+    calls.forEach(function(c){ c.classList.toggle('lit', +c.dataset.step === i); });
+    if(count) count.textContent = i+1;
+    prev.disabled = i===0;
+    next.disabled = i===total-1;
+  }
+  next.addEventListener('click', function(){ if(i<total-1){i++;render();} });
+  prev.addEventListener('click', function(){ if(i>0){i--;render();} });
+  nodes.forEach(function(n){ n.addEventListener('click', function(){ i=+n.dataset.i; render(); }); });
+  walk.tabIndex = 0;
+  walk.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ if(i<total-1){i++;render();} }
+    if(e.key==='ArrowLeft'){ if(i>0){i--;render();} }
+  });
+  render();
+});
+(function(){
+  var links = {};
+  document.querySelectorAll('.toc a[data-toc]').forEach(function(a){ links[a.dataset.toc] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        Object.keys(links).forEach(function(k){ links[k].classList.remove('active'); });
+        if(links[e.target.id]) links[e.target.id].classList.add('active');
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px'});
+  document.querySelectorAll('section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>
+</body>
+</html>

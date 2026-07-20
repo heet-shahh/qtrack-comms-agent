@@ -6,6 +6,7 @@ import { composeMessage, FALLOUT_SCRIPT } from '../lib/stateMachine'
 
 const now = () => new Date()
 const hoursAgoISO = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString()
+const clone = (o) => JSON.parse(JSON.stringify(o))
 
 let taskSeq = 2000
 const newTaskId = () => `T-${++taskSeq}`
@@ -13,8 +14,7 @@ let eventSeq = 0
 const newEventId = () => `E-${++eventSeq}`
 
 // Build a full Task from a playbook + patient, copying the playbook's goal spec onto it.
-function makeTask(base) {
-  const pb = PLAYBOOKS[base.playbookId]
+function makeTask(base, pb = PLAYBOOKS[base.playbookId]) {
   const patient = PATIENTS[base.patientId]
   return {
     id: base.id || newTaskId(),
@@ -56,18 +56,26 @@ const initialTasks = {}
 SEED_TASKS.forEach((t) => { initialTasks[t.id] = makeTask(t) })
 
 export const useStore = create((set, get) => ({
+  // ---- identity / mode ----
+  mode: 'navigator',            // 'navigator' (clinical) | 'admin' (workflow mgmt)
+  currentNavigator: 'sarah',
+  setMode: (mode) => set({ mode, view: mode === 'admin' ? 'dashboard' : 'home' }),
+  setNavigator: (id) => set({ currentNavigator: id }),
+
+  // ---- reference data ----
   patients: PATIENTS,
   navigators: NAVIGATORS,
+  playbooks: clone(PLAYBOOKS),   // editable in admin; the engine reads from here
   tasks: initialTasks,
   events: seedEvents(initialTasks),
 
-  view: 'dashboard',
+  view: 'home',
   selectedTaskId: null,
   selectedPatientId: null,
   toast: null,
 
   setView: (view) => set({ view }),
-  openTask: (id) => set({ view: 'task', selectedTaskId: id }),
+  openTask: (id) => set({ view: get().mode === 'admin' ? 'task' : 'navtask', selectedTaskId: id }),
   openPatient: (id) => set({ view: 'patient', selectedPatientId: id }),
   flash: (msg) => {
     set({ toast: { msg, ts: Date.now() } })
@@ -75,6 +83,10 @@ export const useStore = create((set, get) => ({
       if (get().toast && Date.now() - get().toast.ts >= 2400) set({ toast: null })
     }, 2600)
   },
+
+  // ---- admin: workflow configuration ----
+  updatePlaybook: (id, patch) =>
+    set((s) => ({ playbooks: { ...s.playbooks, [id]: { ...s.playbooks[id], ...patch } } })),
 
   // ---- core primitives ----
   _log: (taskId, patientId, from, to, changedBy, note) =>
@@ -98,27 +110,21 @@ export const useStore = create((set, get) => ({
 
   // ---- triggers ----
   fireTrigger: (playbookId, patientId) => {
-    const pb = PLAYBOOKS[playbookId]
+    const pb = get().playbooks[playbookId]
     const isAssisted = pb.tier === 'assisted'
     const patient = PATIENTS[patientId]
     const task = makeTask({
-      playbookId, patientId, hoursAgo: 0,
-      state: 'created',
+      playbookId, patientId, hoursAgo: 0, state: 'created',
       ownershipStatus: isAssisted ? 'proposed' : null,
-      assignedNavigator: isAssisted ? null : null,
-    })
+    }, pb)
     set((s) => ({ tasks: { ...s.tasks, [task.id]: task } }))
     get()._log(task.id, patientId, '∅', 'created', 'system', pb.trigger)
-    // Automatic tasks auto-advance to queued; assisted wait for ownership.
-    if (!isAssisted) {
-      get()._transition(task.id, 'queued', 'system', 'Auto-queued (binary/logistics → automatic)')
-    }
+    if (!isAssisted) get()._transition(task.id, 'queued', 'system', 'Auto-queued (binary/logistics → automatic)')
     get().flash(`Trigger fired · ${pb.name} · ${patient.name}`)
     return task.id
   },
 
   runNightlyScan: () => {
-    // Simulate the derived background scan finding two overdue conditions.
     const created = []
     created.push(get().fireTrigger('overdue_chase', 'p_williams'))
     created.push(get().fireTrigger('lcs_eligibility', 'p_nguyen'))
@@ -128,7 +134,7 @@ export const useStore = create((set, get) => ({
   // ---- automatic track (playbooks 1-4) ----
   sendOutreach: (taskId) => {
     const t = get().tasks[taskId]
-    const pb = PLAYBOOKS[t.playbookId]
+    const pb = get().playbooks[t.playbookId]
     const patient = PATIENTS[t.patientId]
     const attempt = (t.attemptCount || 0) + 1
     const body = composeMessage(pb, patient, attempt)
@@ -141,7 +147,7 @@ export const useStore = create((set, get) => ({
 
   retry: (taskId) => {
     const t = get().tasks[taskId]
-    const pb = PLAYBOOKS[t.playbookId]
+    const pb = get().playbooks[t.playbookId]
     const patient = PATIENTS[t.patientId]
     const attempt = (t.attemptCount || 0) + 1
     if (attempt > pb.retryPolicy.maxAttempts) {
@@ -158,7 +164,7 @@ export const useStore = create((set, get) => ({
 
   receiveReply: (taskId, text) => {
     const t = get().tasks[taskId]
-    const pb = PLAYBOOKS[t.playbookId]
+    const pb = get().playbooks[t.playbookId]
     const patient = PATIENTS[t.patientId]
     const result = interpret(text, pb)
     get()._addMessage(taskId, { direction: 'inbound', channel: t.channel, body: text, interpreted: result })
@@ -182,15 +188,12 @@ export const useStore = create((set, get) => ({
     }
 
     if (result.matched) {
-      const summary = { response_type: result.outcome.response_type, ...result.outcome }
-      get()._patch(taskId, { outcomeSummary: summary })
+      get()._patch(taskId, { outcomeSummary: { response_type: result.outcome.response_type, ...result.outcome } })
       get()._transition(taskId, 'completed', 'system', `Goal met: ${result.outcome.response_type}`)
       get()._maybeSpawnNext(taskId)
       get().flash(`Matched · ${result.outcome.response_type} · task completed`)
       return
     }
-
-    // unclear, no fallout
     get().flash('Unclear reply logged · retry on cadence')
   },
 
@@ -199,20 +202,30 @@ export const useStore = create((set, get) => ({
     const patient = PATIENTS[t.patientId]
     get()._patch(taskId, { escalationReason: reason, assignedNavigator: patient.navigator })
     get()._transition(taskId, 'escalated', 'system', reason)
-    get().flash('Escalated to navigator queue (SLA: same business day)')
+    get().flash('Escalated to navigator (SLA: same business day)')
+  },
+
+  // Navigator resolves a Track-A escalation after calling the patient back.
+  resolveEscalation: (taskId, { note, scheduled }) => {
+    const t = get().tasks[taskId]
+    get()._patch(taskId, { outcomeSummary: { response_type: 'navigator_resolved', note, scheduled } })
+    get()._transition(taskId, 'completed', 'navigator', `Navigator called back and resolved. ${note ? '"' + note + '"' : ''}`)
+    get().flash('Call logged · task closed')
   },
 
   _maybeSpawnNext: (taskId) => {
     const t = get().tasks[taskId]
-    const pb = PLAYBOOKS[t.playbookId]
+    const pb = get().playbooks[t.playbookId]
     if (!pb.nextTaskOnSuccess) return
+    const nextPb = get().playbooks[pb.nextTaskOnSuccess.playbookId]
+    if (!nextPb) return
     const next = makeTask({
       playbookId: pb.nextTaskOnSuccess.playbookId, patientId: t.patientId, hoursAgo: 0,
       state: 'created', sourceEvent: `Spawned by ${t.id} on success`,
-    })
+    }, nextPb)
     set((s) => ({ tasks: { ...s.tasks, [next.id]: next } }))
     get()._log(next.id, t.patientId, '∅', 'created', 'system', `Chained from ${t.id}: ${pb.nextTaskOnSuccess.label}`)
-    get()._transition(next.id, 'queued', 'system', 'Auto-queued')
+    if (nextPb.tier !== 'assisted') get()._transition(next.id, 'queued', 'system', 'Auto-queued')
     get()._patch(taskId, { nextTaskSpawned: { id: next.id, label: pb.nextTaskOnSuccess.label } })
   },
 
@@ -248,9 +261,9 @@ export const useStore = create((set, get) => ({
     if (!c.patient_understood) missing.push('patient understood')
     if (!c.scheduled) missing.push('scheduled')
     if (c.scheduled === 'yes' && !c.scheduled_date) missing.push('scheduled date')
-    if (!c.action_items) missing.push('action items')
+    if (!c.action_items) missing.push('next steps')
     if (missing.length) {
-      get().flash(`Completion gate blocked · missing: ${missing.join(', ')}`)
+      get().flash(`Can't close yet · still need: ${missing.join(', ')}`)
       return false
     }
     get()._patch(taskId, { outcomeSummary: { response_type: 'capture_complete', ...c } })
@@ -261,7 +274,7 @@ export const useStore = create((set, get) => ({
     }
     get()._transition(taskId, 'completed', 'navigator', 'Capture gate satisfied → task completed.')
     get()._maybeSpawnNext(taskId)
-    get().flash('Capture confirmed · task completed')
+    get().flash('Call logged · task completed')
     return true
   },
 }))

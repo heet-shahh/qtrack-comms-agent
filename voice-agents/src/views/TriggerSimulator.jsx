@@ -1,13 +1,14 @@
 import React, { useState } from 'react'
 import { useStore } from '../store/useStore'
-import { PLAYBOOK_LIST } from '../data/playbooks'
 
 export default function TriggerSimulator() {
   const patients = Object.values(useStore((s) => s.patients))
+  const playbooks = useStore((s) => s.playbooks)
   const fireTrigger = useStore((s) => s.fireTrigger)
   const runNightlyScan = useStore((s) => s.runNightlyScan)
   const openTask = useStore((s) => s.openTask)
-  const [pb, setPb] = useState(PLAYBOOK_LIST[1].id)
+  const playbookList = Object.values(playbooks).sort((a, b) => a.num - b.num)
+  const [pb, setPb] = useState('overdue_chase')
   const [pid, setPid] = useState('p_chen')
 
   const fire = () => {
@@ -28,7 +29,7 @@ export default function TriggerSimulator() {
           <div className="field">
             <label>Condition · playbook</label>
             <select className="input" value={pb} onChange={(e) => setPb(e.target.value)}>
-              {PLAYBOOK_LIST.map((p) => (
+              {playbookList.map((p) => (
                 <option key={p.id} value={p.id}>{p.num}. {p.name} · {p.tier}</option>
               ))}
             </select>

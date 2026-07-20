@@ -1,11 +1,11 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
-import { PLAYBOOKS } from '../data/playbooks'
 import { StatePill, TierPill, fmtTime } from '../components/common'
 
 export default function PatientDetail() {
   const pid = useStore((s) => s.selectedPatientId)
   const patient = useStore((s) => s.patients[pid])
+  const playbooks = useStore((s) => s.playbooks)
   const navigators = useStore((s) => s.navigators)
   const tasks = Object.values(useStore((s) => s.tasks)).filter((t) => t.patientId === pid)
   const setView = useStore((s) => s.setView)
@@ -43,7 +43,7 @@ export default function PatientDetail() {
             {tasks.map((t) => (
               <div key={t.id} className="row" style={{ cursor: 'pointer' }} onClick={() => openTask(t.id)}>
                 <span className="mono faint" style={{ fontSize: 12 }}>{t.id}</span>
-                <span style={{ flex: 1, fontSize: 13 }}>{PLAYBOOKS[t.playbookId].name}</span>
+                <span style={{ flex: 1, fontSize: 13 }}>{playbooks[t.playbookId].name}</span>
                 <StatePill state={t.state} />
               </div>
             ))}
@@ -57,7 +57,7 @@ export default function PatientDetail() {
             {comms.map((m, i) => (
               <div key={i} className={`bubble ${m.direction === 'outbound' ? 'out' : 'in'}`} style={{ maxWidth: '88%' }}>
                 <div>{m.body}</div>
-                <div className="meta">{m.direction === 'outbound' ? 'AGENT' : 'PATIENT'} · {m.channel} · {PLAYBOOKS[m.task.playbookId].name} · {fmtTime(m.ts)}</div>
+                <div className="meta">{m.direction === 'outbound' ? 'AGENT' : 'PATIENT'} · {m.channel} · {playbooks[m.task.playbookId].name} · {fmtTime(m.ts)}</div>
               </div>
             ))}
             {comms.length === 0 && <div className="empty">No communications yet.</div>}

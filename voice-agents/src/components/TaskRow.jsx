@@ -1,12 +1,11 @@
 import React from 'react'
 import { useStore } from '../store/useStore'
-import { PLAYBOOKS } from '../data/playbooks'
 import { StatePill, timeAgo } from './common'
 
 export default function TaskRow({ task }) {
   const patient = useStore((s) => s.patients[task.patientId])
   const openTask = useStore((s) => s.openTask)
-  const pb = PLAYBOOKS[task.playbookId]
+  const pb = useStore((s) => s.playbooks[task.playbookId])
   return (
     <div className="task-row" onClick={() => openTask(task.id)}>
       <div>

@@ -15,6 +15,19 @@ npm run dev
 
 Opens at http://localhost:5180
 
+## Two modes (toggle top-right: "Viewing as")
+
+Real deployments gate these by role; here a switcher flips between them.
+
+- **Navigator (clinical, default):** the simple experience for the people who actually
+  make calls. A plain-English worklist ("3 patients need a call"), each with talking
+  points and one "log the call" form. No engine jargon. Tabs: My Work · Assistant
+  Activity (what the automation did for their panel) · My Patients.
+- **Admin (workflow management):** the configuration + ops console. The **Workflows**
+  screen edits each condition's trigger, goal, retry policy, escalation words, and what
+  runs next on success — and those edits flow into the live engine. Plus Trigger
+  Simulator, Task Queue, Event Log, Dashboard, Patients.
+
 ## The idea
 
 - **Playbook** = a versioned per-condition state-machine definition (5 of them).
