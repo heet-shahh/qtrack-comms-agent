@@ -1,5 +1,9 @@
 // qTrack prototype — voice agents (Auto / Assist) in IPN & LCS workflows.
-// Clickable mock only: no backend calls, all state lives in this file.
+// The clickable mock, now with a REAL voice agent wired into the two call
+// surfaces (auto call console + assisted calling session) via the Retell
+// adapter — see ./voice/. Everything else is still in-file mock state.
+
+import { mountVoiceAgent, unmountVoiceAgent } from './voice/mount.js'
 
 document.querySelector('#app').innerHTML = `
 <header class="topbar">
@@ -121,7 +125,7 @@ const modeBadge = (kind,sm) => kind==='auto' ? `<span class="modeicon auto${sm?'
    DATA — names rendered as John/Jane Doe N; all clinical detail
    is placeholder text per the qTrack prototyping convention.
    ============================================================ */
-const AGENT = {appt:"Appointment Agent", pa:"Prior Authorization Agent"};
+const AGENT = {appt:"Appointment Agent", pa:"Prior Authorization Agent", reminder:"Reminder Agent"};
 
 const patients = [
   {id:1,n:"John Doe 1",a:"67M",mrn:"T6B36D",prog:"LCS",progFull:"Lung Cancer Screening",find:"22 mm · solid · LUL"},
@@ -142,26 +146,6 @@ const tasksByPatient = {
   5:[
     {t:"Clarifying questions",s:"context ready · not yet called",kind:"assist",assignee:"Dr Doe",status:"pending"},
     {t:"Enrollment",s:"escalated · needs human",kind:"auto",sub:"pa",assignee:AGENT.pa,status:"pending"},
-  ],
-};
-
-const autoTranscript = {
-  happy:[
-    {who:"agent",msg:"Hello, this is the care team's assistant — is this a good time to confirm your upcoming appointment?"},
-    {who:"patient",msg:"Yes, go ahead."},
-    {who:"agent",msg:"You're confirmed for [date/time placeholder]. Can I confirm [callback number placeholder] is still best to reach you?"},
-    {who:"patient",msg:"Yes, that's correct."},
-    {who:"agent",msg:"Great, thank you — you're all set. Have a good day."},
-  ],
-  sad:[
-    {who:"agent",msg:"Hello, this is the care team's assistant — is this a good time to confirm your upcoming appointment?"},
-    {who:"patient",msg:"[no response after 4 rings — voicemail reached]"},
-    {who:"agent",msg:"[Voicemail left: call-back request + reference number placeholder.]"},
-  ],
-  esc:[
-    {who:"agent",msg:"Hello, this is the care team's assistant — is this a good time to confirm your upcoming appointment?"},
-    {who:"patient",msg:"Actually, I have a question about coverage — can someone call me back?"},
-    {who:"agent",msg:"Of course — let me connect you with a member of your care team who can go over that with you directly."},
   ],
 };
 
@@ -385,17 +369,22 @@ function openAutoConsole(p,t,outcome){
         <button class="opick ${outcome==='esc'?'active esc':''}" data-o="esc">Escalate to human</button>
       </div>
     </div>
-    <div class="ed-body"><div class="transcript" id="autoTranscript"></div></div>
+    <div class="ed-body"><div id="autoVoiceMount"></div></div>
     <div class="ed-foot">
       <button class="cancel" id="edCancel">Cancel</button>
       <button class="btn">Save</button>
       <button class="btn primary" id="edConfirmOutcome">${outcome==='esc'?'✓ Assign to human':'✓ Confirm outcome'}</button>
     </div>
   `;
-  const renderT = ()=>{ document.getElementById("autoTranscript").innerHTML = autoTranscript[autoOutcome].map(m=>`
-    <div class="turn ${m.who==='agent'?'agent':'right'}"><div class="who">${m.who==='agent'?t.assignee:'Patient'}</div><div class="msg">${m.msg}</div></div>`).join(""); };
-  renderT();
-  ed.querySelectorAll(".opick").forEach(b=>b.onclick=()=>openAutoConsole(p,t,b.dataset.o));
+  mountVoiceAgent(document.getElementById("autoVoiceMount"), { patient: p, task: t });
+  // Outcome picker is the navigator's manual call: toggle it in place rather than
+  // re-rendering the console, so a live call keeps running underneath.
+  ed.querySelectorAll(".opick").forEach(b=>b.onclick=()=>{
+    autoOutcome = b.dataset.o;
+    ed.querySelectorAll(".opick").forEach(x=>x.classList.remove("active","happy","sad","esc"));
+    b.classList.add("active", autoOutcome);
+    document.getElementById("edConfirmOutcome").textContent = autoOutcome==='esc'?'✓ Assign to human':'✓ Confirm outcome';
+  });
   document.getElementById("edClose").onclick = closeEditor;
   document.getElementById("edCancel").onclick = closeEditor;
   document.getElementById("edConfirmOutcome").onclick = ()=>{
@@ -407,6 +396,7 @@ function openAutoConsole(p,t,outcome){
   };
 }
 function closeEditor(){
+  unmountVoiceAgent(document.getElementById("autoVoiceMount"));
   document.getElementById("editor").classList.add("hidden");
   document.getElementById("workarea").classList.remove("hidden");
   if(document.getElementById("records").classList.contains("hidden"))document.getElementById("tasklist").classList.remove("collapsed");
@@ -422,6 +412,11 @@ let sessionPos = 0;
 let sessionPhase = "context"; // context | dialing | live | wrapup | done
 let sessionItems = [];
 let sessionStats = {calls:0, items:0};
+let sessionCall = null;      // full Retell call object (transcript + call_analysis)
+let sessionCallId = null;    // Retell call id, captured live from the widget
+let sessionTranscript = [];  // live transcript array, captured as the call runs
+let sessionEmrSent = false;
+let sessionGenerating = false; // true while polling Retell's post-call analysis
 
 function buildAssistQueue(){
   return patients.filter(p=>tasksByPatient[p.id].some(t=>t.kind==="assist"&&t.status==="pending")).map(p=>p.id);
@@ -511,28 +506,34 @@ function renderSession(){
   if(sessionPhase==="live"){
     body.innerHTML = `
       <div class="sess-progress">${progress}</div>
-      <div class="sess-card" style="height:420px">
-        <div class="console" style="height:100%">
-          <div class="transcript">
-            <div class="turn"><div class="who">${t.assignee}</div><div class="msg">Hi ${p.n}, this is ${t.assignee} with your care team — do you have a few minutes to go over your recent results?</div></div>
-            <div class="turn right"><div class="who">Patient</div><div class="msg">Yes, go ahead.</div></div>
-            <div class="turn"><div class="who">${t.assignee}</div><div class="msg">Your results showed ${p.find} — that means it needs a closer look, not that it's a diagnosis. We'd like to get you scheduled with a specialist.</div></div>
-            <div class="turn right"><div class="who">Patient</div><div class="msg">Okay... is that serious?</div></div>
-            <div class="turn"><div class="who">${t.assignee}</div><div class="msg">[continue conversation — placeholder]</div></div>
-          </div>
-          <div class="notespane">
-            <h3>Agent notes</h3>
-            <div class="draft" style="max-height:none">Patient understood the finding after explanation. Asked about seriousness — reassured, referral discussed. [Notes placeholder — running summary continues here.]</div>
-          </div>
+      <div class="sess-card">
+        <div class="sess-pt"><span class="avatar" style="width:38px;height:38px;font-size:14px">${initials(p.n)}</span>
+          <div><div class="nm">Live call · ${p.n}</div><div class="psub">Robin (agent) places the call from Aira's brief — you role-play ${p.n}.</div></div>
         </div>
+        <div class="talktrack">
+          <div class="draftlabel" style="margin-top:0"><span>Talk track · say these while on the call</span></div>
+          <ul class="qlist">
+            <li>Confirm ${p.n} understands the finding (${p.find}) and that it needs a closer look, not that it's a diagnosis.</li>
+            <li>Ask about new or worsening symptoms since the last visit — [symptom placeholder].</li>
+            <li>Confirm the best callback number and preferred contact window.</li>
+          </ul>
+        </div>
+        <div id="sessVoiceMount"></div>
       </div>
-      <div class="sess-foot"><button class="btn primary" id="btnEndCall">✓ End call</button></div>`;
+      <div class="sess-foot"><button class="btn primary" id="btnEndCall">✓ End call &amp; wrap up</button></div>`;
+    sessionCall = null; sessionCallId = null; sessionTranscript = []; sessionEmrSent = false;
+    mountVoiceAgent(document.getElementById("sessVoiceMount"), {
+      patient: p, task: t,
+      onCallId: (id)=>{ sessionCallId = id; },
+      onTranscript: (tr)=>{ sessionTranscript = tr || []; },
+      onEnded: (res)=>{
+        if(res?.call) sessionCall = res.call;
+        sessionCallId = res?.callId || sessionCallId;
+        if(sessionPhase==="wrapup") paintWrapup(p);
+      },
+    });
     document.getElementById("btnEndCall").onclick = ()=>{
-      sessionItems = [
-        {txt:`Confirm the referral appointment date/time with ${p.n}`,kind:"auto",assignee:AGENT.appt,added:false},
-        {txt:`Verify prior authorization status for the referral`,kind:"auto",assignee:AGENT.pa,added:false},
-        {txt:`Review ${p.n}'s question about the finding before next contact — [placeholder]`,kind:"human",assignee:t.assignee,added:false},
-      ];
+      unmountVoiceAgent(document.getElementById("sessVoiceMount"));
       t.s = "completed · notes saved"; t.status="done";
       sessionStats.calls++;
       renderTasks();
@@ -545,16 +546,127 @@ function renderSession(){
     body.innerHTML = `
       <div class="sess-progress">${progress}</div>
       <div class="sess-card">
-        <h2 style="margin-top:0;font-size:17px">Call notes · ${p.n}</h2>
-        <div class="draft" style="max-height:none">Patient understood the finding after explanation. Asked about seriousness — reassured, referral discussed. [Notes placeholder.]</div>
-        <div class="draftlabel"><span>Proposed follow-up action items</span></div>
+        <div class="emr-top">
+          <div class="draftlabel" style="margin:0"><span>Clinical note · summary of the call</span></div>
+          <button class="btn primary" id="btnSendEmr">⤴ Send clinical note to EMR</button>
+        </div>
+        <textarea class="note-edit" id="sessNote"></textarea>
+        <div class="va-tags" id="sessNoteTags"></div>
+
+        <div class="draftlabel" style="margin-top:16px"><span>Follow-up action items · generated from the call</span></div>
         <div id="sessItems"></div>
+
         <div class="sess-foot"><button class="btn primary" id="btnNextPatient">${sessionPos+1<sessionQueue.length?'Next patient →':'Finish session'}</button></div>
       </div>`;
-    renderSessionItems();
     document.getElementById("btnNextPatient").onclick = advanceSession;
+    paintWrapup(p);
+    hydrateWrapup(p);
     return;
   }
+}
+
+// The live transcript as plain text, for the never-stuck fallback note.
+function transcriptText(){
+  return (sessionTranscript||[]).map(x=>`${x.role==='agent'?'Agent':'Patient'}: ${x.content}`).join("\n");
+}
+
+// Clinical note: prefer Retell's LLM-written clinical_note, then its default
+// call_summary; never leave "Generating…" once polling has finished.
+function clinicalNote(p){
+  const a = sessionCall?.call_analysis, cad = a?.custom_analysis_data;
+  if(cad?.clinical_note) return cad.clinical_note;
+  if(a?.call_summary) return a.call_summary;
+  if(sessionGenerating) return "Generating clinical note from the call…";
+  const txt = transcriptText();
+  return txt ? `Automated summary unavailable — transcript follows.\n\n${txt}`
+             : `No transcript was captured for this call with ${p.n} (the call may not have connected).`;
+}
+
+// Tolerant parse of Retell's action_items string → array of {task, agent}.
+function parseActionItems(raw){
+  if(!raw) return null;
+  const s = String(raw).trim();
+  const a = s.indexOf("["), b = s.lastIndexOf("]");
+  if(a>=0 && b>a){ try{ const arr = JSON.parse(s.slice(a,b+1)); if(Array.isArray(arr)) return arr; }catch{} }
+  return null;
+}
+const KNOWN_AGENT = {
+  "appointment agent":AGENT.appt, "prior authorization agent":AGENT.pa,
+  "reminder agent":AGENT.reminder, "care navigator":"Care navigator",
+};
+// Follow-up items generated from the actual conversation (Retell's post-call LLM);
+// falls back to a keyword scan of the transcript only if analysis never arrives.
+function itemsFromCall(p){
+  const cad = sessionCall?.call_analysis?.custom_analysis_data;
+  const parsed = parseActionItems(cad?.action_items);
+  if(parsed){
+    return parsed.filter(x=>x && (x.task||x.text)).map(x=>{
+      const assignee = KNOWN_AGENT[String(x.agent||"").toLowerCase().trim()] || x.agent || "Care navigator";
+      return { txt:(x.task||x.text), assignee, kind: assignee==="Care navigator"?"human":"auto", added:false };
+    });
+  }
+  if(sessionGenerating) return null; // show a "generating" placeholder, not stale items
+  // fallback (analysis unavailable): light keyword scan of the transcript
+  const text = (transcriptText()+" "+(sessionCall?.call_analysis?.call_summary||"")).toLowerCase();
+  const items = [];
+  if(/appoint|schedul|visit|book|come in|slot|reschedul/.test(text)) items.push({txt:`Schedule / confirm the appointment for ${p.n}`, assignee:AGENT.appt, kind:"auto"});
+  if(/auth|coverage|eligib|insur|prior|approval|referral/.test(text)) items.push({txt:`Verify prior authorization / coverage for ${p.n}`, assignee:AGENT.pa, kind:"auto"});
+  if(/remind|call ?back|follow[- ]?up|reach out|check in|later|another time|busy|voicemail/.test(text)) items.push({txt:`Send a follow-up reminder / callback to ${p.n}`, assignee:AGENT.reminder, kind:"auto"});
+  if(/why|serious|scared|worried|cancer|dangerous|mean|nurse|question/.test(text)) items.push({txt:`Nurse to answer ${p.n}'s clinical question before next contact`, assignee:"Care navigator", kind:"human"});
+  if(items.length===0) items.push({txt:`Review the call and decide the next step for ${p.n}`, assignee:"Care navigator", kind:"human"});
+  return items.map(i=>({...i, added:false}));
+}
+
+function paintWrapup(p){
+  if(sessionPhase!=="wrapup") return;
+  const note = document.getElementById("sessNote");
+  if(note && document.activeElement!==note) note.value = clinicalNote(p);
+  const tags = document.getElementById("sessNoteTags");
+  const a = sessionCall?.call_analysis;
+  if(tags) tags.innerHTML = a ?
+    ((a.user_sentiment?`<span class="tag">sentiment: ${a.user_sentiment}</span>`:"")
+     + ('call_successful' in a?`<span class="tag">successful: ${String(a.call_successful)}</span>`:"")) : "";
+  const items = itemsFromCall(p);
+  if(items===null){ // still generating, no dynamic items yet
+    const box = document.getElementById("sessItems");
+    if(box) box.innerHTML = `<div class="psub" style="padding:4px 2px">Generating action items from the call…</div>`;
+  } else {
+    sessionItems = items;
+    renderSessionItems();
+  }
+  wireSendEmr();
+}
+
+// Poll Retell's post-call analysis until the note/action items arrive, repainting
+// as data improves; always resolves to real content (never stuck on "Generating…").
+async function hydrateWrapup(p){
+  sessionGenerating = true;
+  paintWrapup(p);
+  if(sessionCallId){
+    for(let i=0;i<12 && sessionPhase==="wrapup";i++){
+      try{
+        const res = await fetch("/api/call/"+sessionCallId);
+        const call = await res.json();
+        if(call && (call.transcript || call.call_analysis)) sessionCall = call;
+        paintWrapup(p);
+        const cad = call?.call_analysis?.custom_analysis_data;
+        if(cad && (cad.clinical_note || cad.action_items!==undefined)) break;
+      }catch{}
+      await new Promise(r=>setTimeout(r,2000));
+    }
+  }
+  sessionGenerating = false;
+  paintWrapup(p);
+}
+function wireSendEmr(){
+  const btn = document.getElementById("btnSendEmr");
+  if(!btn) return;
+  if(sessionEmrSent){ btn.className="btn sent"; btn.textContent="✓ Sent to EMR"; btn.disabled=true; return; }
+  btn.className="btn primary"; btn.disabled = false;
+  btn.onclick = ()=>{
+    sessionEmrSent = true;
+    btn.className="btn sent"; btn.textContent=`✓ Sent to EMR · note ${(sessionCallId||"draft").slice(0,10)}`; btn.disabled=true;
+  };
 }
 function renderSessionItems(){
   const box = document.getElementById("sessItems");
@@ -580,7 +692,7 @@ function advanceSession(){
   else{ sessionPhase="context"; }
   renderSession();
 }
-document.getElementById("sessExit").onclick = document.getElementById("sessExitLbl").onclick = ()=>{ show("screen-worklist"); renderWorklist(); renderTiles(); };
+document.getElementById("sessExit").onclick = document.getElementById("sessExitLbl").onclick = ()=>{ unmountVoiceAgent(document.getElementById("sessVoiceMount")); show("screen-worklist"); renderWorklist(); renderTiles(); };
 
 /* ---------- navigation ---------- */
 function show(id){document.querySelectorAll(".screen").forEach(s=>s.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");}

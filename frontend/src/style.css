@@ -226,3 +226,18 @@ button{font-family:inherit;cursor:pointer}
 .sess-progress .sp{flex:1;height:4px;border-radius:2px;background:var(--border-2)}
 .sess-progress .sp.done{background:var(--brand)}
 .sess-progress .sp.now{background:var(--attention)}
+
+/* fix: bare inline icons (iconAuto/iconHuman used outside .modeicon/.avatar) have
+   no intrinsic size and blow up to full width — constrain them everywhere. */
+.aitem .who svg{width:14px;height:14px;flex:0 0 auto;vertical-align:middle}
+.aitem .who{display:flex;align-items:center;gap:6px}
+
+/* live-call talk track (clarifying questions shown during the call) */
+.talktrack{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin:14px 0}
+.talktrack .qlist li{color:var(--text-2)}
+
+/* clinical-note → EMR header row in the wrap-up */
+.emr-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.note-edit{width:100%;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-2);color:var(--text);
+  padding:12px;font-size:13px;line-height:1.5;resize:vertical;font-family:inherit;min-height:88px}
+.btn.sent{background:var(--success-tint);color:var(--success-text);border-color:var(--success)}

@@ -8,19 +8,24 @@ this app serves it too (see the fallback at the bottom).
 
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load backend/.env (holds RETELL_API_KEY) before the router reads it at import.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from fastapi import FastAPI
 
+from .retell import router as retell_router
+
 app = FastAPI(title="reflect-app")
+
+# Voice adapter: /api/health, /api/voices, /api/web-call, /api/call/{id}.
+app.include_router(retell_router)
 
 
 @app.get("/api/hello")
 def hello():
     return {"message": "Hello from ryureflect 👋"}
-
-
-@app.get("/api/health")
-def health():
-    return {"ok": True}
 
 
 # Published-mode SPA serving: app/static only exists in the publish image (the

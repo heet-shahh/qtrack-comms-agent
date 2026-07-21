@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 // All injected by the reflect supervisor when it starts the dev server:
 //  - VITE_PORT: the port reflect's control plane reverse-proxies to.
@@ -8,6 +9,7 @@ const base = process.env.VITE_BASE || '/'
 
 export default defineConfig({
   base,
+  plugins: [react()],
   server: {
     host: '0.0.0.0',
     port,

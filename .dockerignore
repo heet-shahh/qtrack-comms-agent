@@ -8,3 +8,6 @@
 .rr
 .env
 .venv
+# POC: bake the Retell key into the image so it runs with no runtime -e.
+# (Key lives in image layers — do not push this image to a public registry.)
+!backend/.env

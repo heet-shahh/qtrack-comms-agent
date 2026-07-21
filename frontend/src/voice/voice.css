@@ -1,0 +1,39 @@
+/* Voice agent widget — reuses qTrack SDS tokens so it reads as native UI. */
+.voiceagent { display: flex; flex-direction: column; gap: 12px; }
+
+.va-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.va-spacer { flex: 1 1 auto; }
+.va-bar .btn { padding: 8px 14px; }
+
+.va-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border-2); flex: 0 0 auto; }
+.va-dot.connecting { background: var(--attention); animation: pulse 1s ease-in-out infinite; }
+.va-dot.live { background: var(--success); animation: pulse 1s ease-in-out infinite; }
+.va-dot.ended { background: var(--text-3); }
+.va-dot.error { background: var(--urgent); }
+
+.va-select {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  border-radius: var(--radius); padding: 8px 10px; font-size: 13px; font-family: inherit; max-width: 260px;
+}
+
+.va-transcript {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); padding: 14px; min-height: 150px; max-height: 320px; overflow: auto;
+}
+
+.va-note {
+  border-radius: var(--radius); padding: 10px 12px; font-size: 12.5px;
+  background: var(--attention-tint); color: var(--attention-text); border: 1px solid var(--attention);
+}
+.va-note.warn { background: var(--urgent-tint); color: var(--urgent-text); border-color: var(--urgent); }
+.va-note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+.va-outcome { border-top: 1px solid var(--border); padding-top: 12px; }
+.va-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+.va-prompt summary { cursor: pointer; font-size: 12.5px; color: var(--text-3); }
+.va-prompt textarea {
+  width: 100%; margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-2); color: var(--text); padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; resize: vertical;
+}
