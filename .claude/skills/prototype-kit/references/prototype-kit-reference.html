@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qTrack — Prototype Kit Reference Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---------- Qure SDS tokens ---------- */
+:root{
+  --font:"IBM Plex Sans",system-ui,sans-serif;
+  --bg:#ffffff; --bg-2:#f3f4f4; --bg-3:#e8e9ea;
+  --text:#0c1723; --text-2:#39414c; --text-3:#565d66;
+  --brand:#008280; --brand-tint:#0082801f; --on-brand:#f6f7f7;
+  --border:#dee1e2; --border-2:#bbbfc2;
+  --success:#00c86e; --success-tint:#d4f1e4; --success-text:#007a43;
+  --attention:#ffb400; --attention-tint:#f9ebca; --attention-text:#b17900;
+  --urgent:#ed2635; --urgent-tint:#fbdee1; --urgent-text:#93212f;
+  --radius:8px; --radius-full:999px; --pad:16px; --shadow:0 1px 2px #0000001f;
+}
+[data-theme="dark"]{
+  --bg:#1d2732; --bg-2:#0c1723; --bg-3:#141f2a;
+  --text:#f6f7f7; --text-2:#cfd2d4; --text-3:#a8acb0;
+  --brand:#00d0cd; --brand-tint:#00d0cd29; --on-brand:#0c1723;
+  --border:#38414b; --border-2:#646b72;
+  --success:#00c86e; --success-tint:#053d2b; --success-text:#5ddaa2;
+  --attention:#ffb400; --attention-tint:#422a10; --attention-text:#fcd26c;
+  --urgent:#ed2635; --urgent-tint:#451b28; --urgent-text:#f699a1;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:var(--font);color:var(--text);background:var(--bg-2);font-size:14px;line-height:1.4;overflow:hidden}
+button{font-family:inherit;cursor:pointer}
+.hidden{display:none !important}
+.cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);font-weight:600}
+.muted{color:var(--text-3)}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:var(--radius-full);padding:2px 10px;font-size:12px;font-weight:500}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--bg-3);color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:0 0 auto}
+
+/* ---------- top bar ---------- */
+.topbar{height:54px;background:var(--bg-3);display:flex;align-items:center;justify-content:space-between;padding:0 18px;gap:16px}
+.brand{font-weight:700;color:var(--brand);font-size:16px}
+.brand span{color:var(--text-3);font-weight:500;margin-left:8px}
+.topright{display:flex;align-items:center;gap:14px}
+.search{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-full);padding:8px 14px;width:260px;color:var(--text-3);font-size:13px}
+.toggle{width:42px;height:24px;border-radius:var(--radius-full);background:var(--brand);border:none;position:relative;flex:0 0 auto}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--on-brand);transition:left .15s}
+[data-theme="dark"] .toggle::after{left:21px}
+
+.screen{height:calc(100vh - 54px)}
+
+/* ---------- worklist screen ---------- */
+#screen-worklist{padding:20px 24px;overflow:auto}
+.tiles{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.tile{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;min-width:120px}
+.tile.active{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.tile .n{font-size:22px;font-weight:700}
+.tile .l{font-size:12px;color:var(--text-3)}
+.tile.active .l{color:var(--on-brand);opacity:.85}
+.wl-table{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.wl-head,.wl-row{display:grid;grid-template-columns:2.2fr 1.6fr 2fr .9fr 1.3fr;align-items:center;padding:12px 18px;gap:12px}
+.wl-head{border-bottom:1px solid var(--border)}
+.wl-row{border-bottom:1px solid var(--border);cursor:pointer}
+.wl-row:last-child{border-bottom:none}
+.wl-row:hover{background:var(--bg-2)}
+.pname{font-weight:600}
+.psub{font-size:12px;color:var(--text-3)}
+.cell-pt{display:flex;align-items:center;gap:10px}
+.opentag{border:1px solid var(--border);border-radius:var(--radius-full);padding:2px 10px;font-size:12px;color:var(--text-2);display:inline-block}
+.assignee{display:flex;align-items:center;gap:8px}
+.foot{text-align:center;color:var(--text-3);padding:16px;font-size:13px}
+
+/* ---------- patient page ---------- */
+.subheader{height:56px;background:var(--bg);border-bottom:1px solid var(--border-2);display:flex;align-items:center;gap:10px;padding:0 16px}
+.iconbtn{width:34px;height:34px;border:1px solid var(--border);background:var(--bg);border-radius:var(--radius);display:inline-flex;align-items:center;justify-content:center;color:var(--text-2)}
+.crumb{color:var(--text-3);font-size:13px;cursor:pointer}
+.crumb:hover{color:var(--brand)}
+.chip{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-full);padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.chip .cnt{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-full);padding:0 7px;font-size:11px}
+.pident{display:flex;align-items:center;gap:10px;margin-left:4px}
+.pident .nm{font-size:18px;font-weight:700}
+.cohortpos{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--text-3);font-size:13px}
+
+.pbody{display:flex;height:calc(100vh - 54px - 56px);background:var(--bg-2)}
+
+/* mini worklist (opens on cohort-chip click) */
+#miniwl{width:250px;flex:0 0 auto;background:var(--bg);border-right:1px solid var(--border);padding:14px;overflow:auto}
+.miniwl-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.miniwl-sel{border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;margin-bottom:14px}
+.miniwl-grp{margin-bottom:12px}
+.miniwl-grp .ghead{display:flex;justify-content:space-between;margin-bottom:6px}
+.miniwl-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--radius);cursor:pointer}
+.miniwl-item:hover{background:var(--bg-2)}
+.miniwl-item.active{border:1px solid var(--border-2);background:var(--bg)}
+
+/* record rail */
+.rail{width:48px;flex:0 0 auto;background:var(--bg-2);display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 0}
+.railbtn{width:34px;height:34px;border:1px solid var(--border);background:var(--bg);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-2)}
+.railbtn.active{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+
+/* synopsis */
+#synopsis{width:280px;flex:0 0 auto;background:var(--bg-2);padding:16px;overflow:auto}
+.syn-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--text);padding-bottom:8px;margin-bottom:14px}
+.syn-head h2{margin:0;font-size:20px;font-weight:600}      /* Synopsis heading = Heading Main */
+.syn-head .edit{border:1px solid var(--border);background:var(--bg);border-radius:var(--radius-full);padding:4px 12px;font-size:12px}
+.syn-sec{margin-bottom:14px}
+.syn-sec .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:6px}
+.syn-sec .val{font-weight:600}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{border:1px solid var(--border);border-radius:var(--radius-full);padding:3px 10px;font-size:12px}
+.note{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px;font-size:13px}
+.note .nt{font-size:10px;letter-spacing:.06em;color:var(--text-3);font-weight:700;display:block;margin-bottom:4px}
+
+/* records (responsive, overlays synopsis) */
+#records{flex:1 1 360px;min-width:300px;background:var(--bg-2);padding:16px;overflow:auto}
+.rec-head{display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--text);padding-bottom:8px;margin-bottom:14px}
+.rec-head h2{margin:0;font-size:20px;font-weight:600}
+.rec-sec{margin-bottom:14px}
+.rec-sec .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:4px}
+.rec-prior{display:flex;justify-content:space-between;font-size:13px;color:var(--text-2);padding:3px 0}
+
+/* action center = ONE component (tasks + action workspace) */
+#actioncenter{flex:1 1 auto;display:flex;background:var(--bg);border-left:1px solid var(--border);border-top:1px solid var(--border);border-top-left-radius:0;margin:0;min-width:0}
+#tasklist{width:280px;flex:0 0 auto;border-right:1px solid var(--border);padding:14px;display:flex;flex-direction:column;min-height:0}
+#tasklist.collapsed{width:52px;padding:14px 6px}
+.tl-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+#tasklist.collapsed .tl-head,#tasklist.collapsed .tl-sub,#tasklist.collapsed .createtask{display:none}
+.task{display:flex;gap:10px;align-items:flex-start;padding:9px;border-radius:var(--radius);cursor:pointer;margin-bottom:4px}
+.task:hover{background:var(--bg-2)}
+.task.active{background:var(--brand);color:var(--on-brand)}
+.task .num{width:22px;height:22px;border-radius:50%;border:1px solid var(--border-2);display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto}
+.task.active .num{background:var(--on-brand);color:var(--brand);border:none}
+.task .tt{font-weight:600;font-size:13px}
+.task .ts{font-size:11px;color:var(--text-3)}
+.task.active .ts{color:var(--on-brand);opacity:.85}
+#tasklist.collapsed .tt,#tasklist.collapsed .ts{display:none}
+#tasklist.collapsed .task{justify-content:center;padding:7px 0}
+.createtask{margin-top:auto;border:1px solid var(--border);background:var(--bg);border-radius:var(--radius);padding:10px;text-align:center;font-size:13px}
+
+#workarea{flex:1 1 auto;padding:18px 20px;overflow:hidden;min-width:0;display:flex;flex-direction:column}
+.aw-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.aw-title{font-size:19px;font-weight:700;margin:6px 0 2px}
+.aw-assign{margin-left:auto;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-full);padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:6px}
+.why{background:var(--brand-tint);border:1px solid var(--brand);border-radius:var(--radius);padding:12px;margin:12px 0;font-size:13px}
+.why .h{display:flex;align-items:center;gap:8px;color:var(--brand);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px}
+.a-badge{width:20px;height:20px;border-radius:50%;background:var(--brand);color:var(--on-brand);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.draft{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--text-2);max-height:88px;overflow:hidden;position:relative}
+.draftlabel{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin:10px 0 6px}
+.actions{display:flex;gap:10px;margin:14px 0}
+.btn{border-radius:var(--radius);padding:11px 16px;font-size:13px;font-weight:600;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+.btn.primary{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.cmts{border-top:1px solid var(--border);padding-top:10px;margin-top:auto}
+.cmt{display:flex;gap:8px;margin-bottom:8px;font-size:13px}
+.cmt .body{color:var(--text-2)}
+.cmt .mention{color:var(--brand);font-weight:600}
+.cmtbar{display:flex;gap:8px;align-items:center;margin-top:6px}
+.cmtinput{flex:1;border:1px solid var(--border);border-radius:var(--radius-full);padding:9px 14px;color:var(--text-3);font-size:13px;background:var(--bg)}
+
+/* editor state */
+#editor{flex:1 1 auto;display:flex;flex-direction:column;padding:16px 18px;min-width:0;overflow:hidden}
+.ed-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ed-tools{display:flex;gap:14px;align-items:center;border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;font-size:13px;color:var(--text-2);flex-wrap:wrap}
+.ed-body{flex:1 1 auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow:auto;font-size:14px;color:var(--text-2)}
+.ed-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:12px;align-items:center}
+.ed-foot .cancel{margin-right:auto;color:var(--text-3);background:none;border:none;font-size:13px}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">qTrack <span>· Worklist</span></div>
+  <div class="topright">
+    <button class="toggle" id="themeToggle" title="Light / Dark"></button>
+    <div class="search">⌕ search patient / MRN</div>
+  </div>
+</header>
+
+<!-- ============ WORKLIST SCREEN ============ -->
+<section id="screen-worklist" class="screen">
+  <div class="tiles">
+    <div class="tile"><div class="n">103</div><div class="l">Patients</div></div>
+    <div class="tile active"><div class="n">103</div><div class="l">Tasks</div></div>
+    <div class="tile"><div class="n">28</div><div class="l">Eligibility pending</div></div>
+    <div class="tile"><div class="n">46</div><div class="l">Enrolled</div></div>
+    <div class="tile"><div class="n">37</div><div class="l">AI included</div></div>
+    <div class="tile"><div class="n">22</div><div class="l">AI excluded</div></div>
+    <div class="tile"><div class="n">31</div><div class="l">Reminders</div></div>
+  </div>
+  <div class="wl-table">
+    <div class="wl-head cap">
+      <div>Patient</div><div>Finding</div><div>Next action</div><div>Open</div><div>Assignee</div>
+    </div>
+    <div id="wlRows"></div>
+    <div class="foot">+ 95 patient placeholders…</div>
+  </div>
+</section>
+
+<!-- ============ PATIENT PAGE ============ -->
+<section id="screen-patient" class="screen hidden">
+  <div class="subheader">
+    <button class="iconbtn" id="btnExpand" title="Back to Worklist">⤢</button>
+    <span class="crumb" id="crumbWorklist">Worklist</span>
+    <span class="muted">›</span>
+    <button class="chip" id="cohortChip">Eligibility pending <span class="cnt">12</span> ▾</button>
+    <span class="muted">›</span>
+    <div class="pident">
+      <span class="avatar" id="pAvatar">JD</span>
+      <span class="nm" id="pName">John Doe 3</span>
+      <span class="muted" id="pMeta">62M · MRN V6B36D</span>
+    </div>
+    <div class="cohortpos">
+      <span id="pPos">3 of 12 in cohort</span>
+      <button class="iconbtn" id="btnPrev">‹</button>
+      <button class="iconbtn" id="btnNext">›</button>
+    </div>
+  </div>
+
+  <div class="pbody">
+    <!-- mini worklist (cohort chip opens this) -->
+    <aside id="miniwl" class="hidden">
+      <div class="miniwl-head">
+        <div><strong>Eligibility pending</strong><div class="psub">12 patients · by stage</div></div>
+        <button class="iconbtn" id="miniClose">«</button>
+      </div>
+      <div class="miniwl-sel">‹ Worklist · All cohorts · LCS</div>
+      <div id="miniGroups"></div>
+    </aside>
+
+    <!-- record rail -->
+    <nav class="rail">
+      <button class="railbtn" id="railExpand" title="Open mini worklist">»</button>
+      <button class="railbtn" data-rec="Imaging">Im</button>
+      <button class="railbtn" data-rec="Labs">Lb</button>
+      <button class="railbtn" data-rec="Rx">Rx</button>
+      <button class="railbtn" data-rec="Docs">Dc</button>
+    </nav>
+
+    <!-- synopsis -->
+    <aside id="synopsis">
+      <div class="syn-head"><h2>Synopsis</h2><button class="edit">edit</button></div>
+      <div class="syn-sec"><div class="lbl">Program</div><div class="val">Lung Cancer Screening</div><div class="psub">X-Ray vision · LDCT</div></div>
+      <div class="syn-sec"><div class="lbl">Clinical status</div><div class="tagrow"><span class="tag">16 mm solid · RUL</span><span class="tag">Lung-RADS 4B</span></div><div class="psub" style="margin-top:6px">Conditions · placeholder, placeholder</div></div>
+      <div class="syn-sec"><div class="lbl">Stage in cohort</div><div class="tagrow"><span class="tag">Needs first call</span></div></div>
+      <div class="syn-sec"><div class="lbl">Care team</div><div class="psub">Nav · J. Okafor (you)</div><div class="psub">PCP · Dr Doe</div></div>
+      <div class="syn-sec"><div class="lbl">Notes</div>
+        <div class="note"><span class="nt">STAGE</span>[Stage note placeholder]</div>
+        <div class="note"><span class="nt">CONTEXT</span>[Context note placeholder]</div>
+      </div>
+    </aside>
+
+    <!-- records (hidden; overlays synopsis) -->
+    <aside id="records" class="hidden">
+      <div class="rec-head"><button class="iconbtn" id="recBack">‹</button><h2 id="recTitle">Records</h2><span class="muted" id="recSub">/ Imaging</span></div>
+      <div class="rec-sec"><div class="lbl">Headline</div><div><strong>LDCT Chest · low-dose · [date]</strong><div class="psub">Imaging · Radiology · Dr Doe</div></div></div>
+      <div class="rec-sec"><div class="lbl">Impression</div><div class="muted">[Impression placeholder — finding, size, category, and recommended follow-up.]</div></div>
+      <div class="rec-sec"><div class="lbl">Technique / source</div><div class="psub">[technique placeholder] · [source placeholder]</div></div>
+      <div class="rec-sec"><div class="lbl">Prior studies</div>
+        <div class="rec-prior"><span>[date]</span><span>[prior result placeholder]</span></div>
+        <div class="rec-prior"><span>[date]</span><span>[prior result placeholder]</span></div>
+      </div>
+      <div class="actions"><button class="btn">print</button><button class="btn">pin</button></div>
+    </aside>
+
+    <!-- ACTION CENTER = one component: task list + work area -->
+    <section id="actioncenter">
+      <div id="tasklist">
+        <div class="tl-head"><span class="cap">Tasks</span><span class="psub tl-sub">6 open</span></div>
+        <div id="taskRows"></div>
+        <button class="createtask">+ create task</button>
+      </div>
+
+      <!-- default work area -->
+      <div id="workarea">
+        <div class="aw-top">
+          <span class="pill" style="background:var(--brand-tint);color:var(--brand)">Aira</span>
+          <span class="pill" style="background:var(--urgent-tint);color:var(--urgent-text)">Overdue</span>
+          <span class="muted" style="font-size:12px">qure.ai</span>
+          <span class="aw-assign">Assigned <span class="avatar" style="width:20px;height:20px">JO</span> J. Okafor · reassign ▾</span>
+        </div>
+        <div class="aw-title">PCP Letter</div>
+        <div class="psub">Notify the PCP of the screening result · drafted just now</div>
+
+        <div class="why">
+          <div class="h"><span class="a-badge">A</span> Aira · Why this task?</div>
+          [Aira rationale placeholder — why this task is surfaced now, the deadline, and that a draft is ready below to review and send.]
+        </div>
+
+        <div class="draftlabel"><span>Drafted letter · Aira</span><span class="muted">read full draft</span></div>
+        <div class="draft">Dear Dr. Doe,<br><br>Your patient, John Doe 3, underwent a low-dose CT chest on [date] as part of lung cancer screening. I am writing to share the results and recommended follow-up…</div>
+
+        <div class="actions">
+          <button class="btn primary" id="btnEdit">✎ Edit letter</button>
+          <button class="btn">✓ Mark complete</button>
+        </div>
+
+        <div class="cmts">
+          <div class="cap" style="margin-bottom:8px">Comments</div>
+          <div class="cmt"><span class="avatar" style="width:22px;height:22px">JO</span><div><strong>J. Okafor</strong> <span class="muted">18 min</span><div class="body"><span class="mention">@Dr Doe</span> drafted this from Aira's suggestion — can you verify it reads right before I send?</div></div></div>
+          <div class="cmt"><span class="avatar" style="width:22px;height:22px">DD</span><div><strong>Dr Doe</strong> <span class="muted">5 min</span><div class="body"><span class="mention">@J. Okafor</span> checked it — all accurate. Yes, send it.</div></div></div>
+          <div class="cmtbar"><span class="avatar" style="width:22px;height:22px">JO</span><div class="cmtinput">Comment &amp; tag a teammate…</div><button class="btn primary">send</button></div>
+        </div>
+      </div>
+
+      <!-- editor state (hidden) -->
+      <div id="editor" class="hidden">
+        <div class="ed-head">
+          <div class="psub"><span class="crumb">Tasks</span> › <span class="crumb">PCP Letter</span> › <strong style="color:var(--text)">Edit letter</strong></div>
+          <button class="iconbtn" id="edClose">✕</button>
+        </div>
+        <div class="ed-tools">
+          <span>Letter template: <strong style="color:var(--text)">Enrolment Letter ▾</strong></span>
+          <span style="margin-left:auto">B  I  U  T×  ·  List  ·  Align</span>
+        </div>
+        <div class="ed-body" contenteditable="true">
+          <p><strong>Dear Dr. Doe,</strong></p>
+          <p>Your patient, John Doe 3, underwent a low-dose CT chest on [date] as part of lung cancer screening. I am writing to share the results and recommended follow-up.</p>
+          <p>Findings: [finding placeholder]. The study was classified as [category placeholder].</p>
+          <p>Recommendation: [recommendation placeholder]. We would be glad to coordinate scheduling on your behalf.</p>
+          <p>If you have any questions, please don't hesitate to contact us.</p>
+        </div>
+        <div class="ed-foot">
+          <button class="cancel" id="edCancel">Cancel</button>
+          <button class="btn">Save as draft</button>
+          <button class="btn primary">✓ Save letter</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</section>
+
+<script>
+/* ---------- data (names rendered as John/Jane Doe N) ---------- */
+const patients = [
+  {id:1,n:"John Doe 1",a:"67M",mrn:"T6B36D",find:"22 mm · solid · LUL",act:"Call · schedule",st:"Overdue · 2d",sk:"urgent",open:6,asg:"J. Okafor",grp:"Needs first call"},
+  {id:2,n:"Jane Doe 2",a:"71F",mrn:"U6B36D",find:"19 mm · spiculated · RLL",act:"Call · schedule",st:"Due today",sk:"attention",open:4,asg:"J. Okafor",grp:"Needs first call"},
+  {id:3,n:"John Doe 3",a:"62M",mrn:"V6B36D",find:"16 mm · solid · RUL",act:"Call · schedule",st:"Due today",sk:"attention",open:5,asg:"Dr Doe",grp:"Needs first call"},
+  {id:4,n:"John Doe 4",a:"61M",mrn:"W6B36D",find:"11 mm · solid · RUL",act:"First contact",st:"Due tomorrow",sk:"",open:2,asg:"J. Okafor",grp:"Needs first call"},
+  {id:5,n:"Jane Doe 5",a:"58F",mrn:"X6B36D",find:"14 mm · part-solid · RML",act:"Awaiting PCP",st:"On track",sk:"success",open:7,asg:"M. Reyes",grp:"Awaiting PCP"},
+  {id:6,n:"John Doe 6",a:"52M",mrn:"Y6B36D",find:"13 mm · solid · LLL",act:"Chase PCP",st:"Overdue · 3d",sk:"urgent",open:1,asg:"M. Reyes",grp:"Awaiting PCP"},
+  {id:7,n:"Jane Doe 7",a:"49F",mrn:"Z6B36D",find:"15 mm · solid · RUL",act:"Draft letter",st:"This week",sk:"",open:3,asg:"Dr Aboubakar",grp:"Letter to draft"},
+  {id:8,n:"John Doe 8",a:"58M",mrn:"A7B36D",find:"12 mm · solid · RML",act:"Review letter",st:"Scheduled",sk:"",open:2,asg:"Dr Aboubakar",grp:"Letter to draft"},
+];
+const tasks = [
+  {t:"PCP Letter",s:"drafted · just now",active:true},
+  {t:"Call patient · schedule",s:"first contact attempt"},
+  {t:"EMR Update",s:"auto-extracted"},
+  {t:"ACR LUNG-RADS Reg.",s:"pre-filled · needs review"},
+  {t:"Note · PCP Response",s:"received · Dr Doe"},
+  {t:"Patient Letter · Finding",s:"drafted · awaiting send"},
+];
+const initials = n => n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase().replace(/[^A-Z]/g,"D");
+let current = 2; // index of John Doe 3
+
+/* ---------- render worklist ---------- */
+const skColor = sk => sk? {urgent:["--urgent-tint","--urgent-text"],attention:["--attention-tint","--attention-text"],success:["--success-tint","--success-text"]}[sk] : null;
+function renderWorklist(){
+  document.getElementById("wlRows").innerHTML = patients.map((p,i)=>{
+    const c = skColor(p.sk);
+    const stHtml = c
+      ? `<span class="pill" style="background:var(${c[0]});color:var(${c[1]})"><span class="dot" style="background:var(${c[1]})"></span>${p.st}</span>`
+      : `<span class="muted">${p.st}</span>`;
+    return `<div class="wl-row" data-i="${i}">
+      <div class="cell-pt"><span class="avatar">${initials(p.n)}</span><div><div class="pname">${p.n}</div><div class="psub">${p.a} · MRN ${p.mrn}</div></div></div>
+      <div class="psub" style="color:var(--text-2)">${p.find}</div>
+      <div><div style="font-weight:600">${p.act}</div>${stHtml}</div>
+      <div><span class="opentag">${p.open} open</span></div>
+      <div class="assignee"><span class="avatar">${initials(p.asg)}</span><span>${p.asg}</span></div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".wl-row").forEach(r=>r.onclick=()=>openPatient(+r.dataset.i));
+}
+
+/* ---------- render tasks + mini worklist ---------- */
+function renderTasks(){
+  document.getElementById("taskRows").innerHTML = tasks.map((t,i)=>`
+    <div class="task ${t.active?'active':''}" data-i="${i}">
+      <span class="num">${i+1}</span><div><div class="tt">${t.t}</div><div class="ts">${t.s}</div></div>
+    </div>`).join("");
+  document.querySelectorAll("#taskRows .task").forEach(el=>el.onclick=()=>{
+    document.querySelectorAll("#taskRows .task").forEach(x=>x.classList.remove("active"));
+    el.classList.add("active");
+  });
+}
+function renderMini(){
+  const groups = {};
+  patients.forEach((p,i)=>{(groups[p.grp]=groups[p.grp]||[]).push({...p,i})});
+  document.getElementById("miniGroups").innerHTML = Object.entries(groups).map(([g,arr])=>`
+    <div class="miniwl-grp"><div class="ghead cap"><span>${g}</span><span>${arr.length}</span></div>
+    ${arr.map(p=>`<div class="miniwl-item ${p.i===current?'active':''}" data-i="${p.i}">
+      <span class="avatar">${initials(p.n)}</span><div><div style="font-weight:600;font-size:13px">${p.n}</div><div class="ts">${p.find}</div></div></div>`).join("")}
+    </div>`).join("");
+  document.querySelectorAll(".miniwl-item").forEach(el=>el.onclick=()=>loadPatient(+el.dataset.i));
+}
+
+/* ---------- navigation ---------- */
+function show(id){document.querySelectorAll(".screen").forEach(s=>s.classList.add("hidden"));document.getElementById(id).classList.remove("hidden");}
+function loadPatient(i){
+  current=i;const p=patients[i];
+  document.getElementById("pName").textContent=p.n;
+  document.getElementById("pAvatar").textContent=initials(p.n);
+  document.getElementById("pMeta").textContent=`${p.a} · MRN ${p.mrn}`;
+  document.getElementById("pPos").textContent=`${i+1} of 12 in cohort`;
+  renderMini();
+}
+function openPatient(i){loadPatient(i);show("screen-patient");resetStates();}
+function resetStates(){
+  document.getElementById("synopsis").classList.remove("hidden");
+  document.getElementById("records").classList.add("hidden");
+  document.getElementById("editor").classList.add("hidden");
+  document.getElementById("workarea").classList.remove("hidden");
+  document.getElementById("tasklist").classList.remove("collapsed");
+  document.querySelectorAll(".railbtn[data-rec]").forEach(b=>b.classList.remove("active"));
+  document.getElementById("miniwl").classList.add("hidden");
+}
+
+/* worklist back */
+document.getElementById("crumbWorklist").onclick=()=>show("screen-worklist");
+document.getElementById("btnExpand").onclick=()=>show("screen-worklist");
+/* prev / next within cohort */
+document.getElementById("btnPrev").onclick=()=>loadPatient((current+patients.length-1)%patients.length);
+document.getElementById("btnNext").onclick=()=>loadPatient((current+1)%patients.length);
+/* cohort chip & rail » open mini worklist */
+function toggleMini(){document.getElementById("miniwl").classList.toggle("hidden");}
+document.getElementById("cohortChip").onclick=toggleMini;
+document.getElementById("railExpand").onclick=toggleMini;
+document.getElementById("miniClose").onclick=()=>document.getElementById("miniwl").classList.add("hidden");
+
+/* records open/close (collapses task list) */
+document.querySelectorAll(".railbtn[data-rec]").forEach(b=>b.onclick=()=>{
+  document.getElementById("editor").classList.add("hidden");
+  document.getElementById("workarea").classList.remove("hidden");
+  document.querySelectorAll(".railbtn[data-rec]").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");
+  document.getElementById("synopsis").classList.add("hidden");
+  const r=document.getElementById("records");r.classList.remove("hidden");
+  document.getElementById("recSub").textContent="/ "+b.dataset.rec;
+  document.getElementById("tasklist").classList.add("collapsed");
+});
+document.getElementById("recBack").onclick=()=>{
+  document.getElementById("records").classList.add("hidden");
+  document.getElementById("synopsis").classList.remove("hidden");
+  document.querySelectorAll(".railbtn[data-rec]").forEach(x=>x.classList.remove("active"));
+  if(document.getElementById("editor").classList.contains("hidden"))document.getElementById("tasklist").classList.remove("collapsed");
+};
+
+/* task editor open/close (collapses task list, synopsis stays) */
+document.getElementById("btnEdit").onclick=()=>{
+  document.getElementById("workarea").classList.add("hidden");
+  document.getElementById("editor").classList.remove("hidden");
+  document.getElementById("tasklist").classList.add("collapsed");
+};
+function closeEditor(){
+  document.getElementById("editor").classList.add("hidden");
+  document.getElementById("workarea").classList.remove("hidden");
+  if(document.getElementById("records").classList.contains("hidden"))document.getElementById("tasklist").classList.remove("collapsed");
+}
+document.getElementById("edClose").onclick=closeEditor;
+document.getElementById("edCancel").onclick=closeEditor;
+
+/* theme toggle */
+document.getElementById("themeToggle").onclick=()=>{
+  const h=document.documentElement;h.dataset.theme=h.dataset.theme==="dark"?"light":"dark";
+};
+
+/* init */
+renderWorklist();renderTasks();renderMini();
+</script>
+</body>
+</html>

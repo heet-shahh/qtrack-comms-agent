@@ -1,0 +1,10 @@
+# node_modules is a symlink to prebaked deps inside the microVM — never send it
+# (or other scratch) into the publish build context.
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/dist
+.git
+.rr
+.env
+.venv
