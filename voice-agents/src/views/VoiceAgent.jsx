@@ -20,6 +20,7 @@ export default function VoiceAgent() {
   const [callId, setCallId] = useState(null)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [backendUp, setBackendUp] = useState(null) // null unknown | true | false
 
   const clientRef = useRef(null)
   const pb = playbooks[playbookId]
@@ -29,7 +30,14 @@ export default function VoiceAgent() {
   useEffect(() => setPromptDraft(prompt), [prompt])
 
   useEffect(() => {
-    fetch('/api/voices').then((r) => r.json()).then((v) => { if (Array.isArray(v)) setVoices(v) }).catch(() => {})
+    fetch('/api/health')
+      .then((r) => safeJson(r))
+      .then((h) => {
+        setBackendUp(!!h.ok)
+        if (!h.hasKey) setBackendUp(false)
+      })
+      .catch(() => setBackendUp(false))
+    fetch('/api/voices').then((r) => safeJson(r)).then((v) => { if (Array.isArray(v)) setVoices(v) }).catch(() => {})
     return () => { try { clientRef.current?.stopCall() } catch {} }
   }, [])
 
@@ -40,8 +48,11 @@ export default function VoiceAgent() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voiceId, prompt: promptDraft, beginMessage, name: `qTrack ${pb.name}`, metadata: { playbookId, patientId } }),
       })
-      const data = await r.json()
-      if (!r.ok) throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error))
+      const data = await safeJson(r)
+      if (!r.ok || !data.access_token) {
+        const detail = data.error ? (typeof data.error === 'string' ? data.error : JSON.stringify(data.error)) : null
+        throw new Error(detail || `Voice backend not reachable (status ${r.status}). Start it with: npm run dev:all`)
+      }
       setCallId(data.call_id)
 
       const client = new RetellWebClient()
@@ -113,8 +124,13 @@ export default function VoiceAgent() {
           <div className="goal-banner" style={{ margin: '8px 0 14px' }}>
             <div><div className="lab">Goal</div><div className="g" style={{ fontSize: 14 }}>{pb.goal}</div></div>
           </div>
+          {backendUp === false && (
+            <div className="callout warn" style={{ marginBottom: 12, fontSize: 12.5 }}>
+              <b style={{ color: 'var(--text)' }}>Voice backend not running.</b> Start both servers with <code>npm run dev:all</code>, then reload this page.
+            </div>
+          )}
           {status === 'idle' || status === 'ended' || status === 'error'
-            ? <button className="btn primary lg" onClick={start}>🎙 Start voice call</button>
+            ? <button className="btn primary lg" onClick={start} disabled={backendUp === false}>🎙 Start voice call</button>
             : <button className="btn warn lg" onClick={end}>■ End call</button>}
           <div className="faint" style={{ fontSize: 11.5, marginTop: 8 }}>Your browser will ask for microphone access.</div>
           {error && <div className="callout warn" style={{ marginTop: 12, fontSize: 12.5 }}><b style={{ color: 'var(--text)' }}>Error.</b> {error}</div>}
@@ -185,4 +201,12 @@ export default function VoiceAgent() {
 
 function statusLabel(s) {
   return { idle: 'Ready', connecting: 'Connecting…', live: 'Call live', ended: 'Call ended', error: 'Error' }[s] || s
+}
+
+// Tolerant JSON parse: an empty or non-JSON body (e.g. a dead backend behind the
+// proxy returning a 500) resolves to {} instead of throwing "Unexpected end of JSON input".
+async function safeJson(r) {
+  const text = await r.text()
+  if (!text) return {}
+  try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
 }
