@@ -514,8 +514,9 @@ function renderSession(){
           <div class="draftlabel" style="margin-top:0"><span>Talk track · say these while on the call</span></div>
           <ul class="qlist">
             <li>Confirm ${p.n} understands the finding (${p.find}) and that it needs a closer look, not that it's a diagnosis.</li>
+            <li>Explain the next step: a physician appointment plus an immediate 3-month follow-up CT scan — confirm they understand both are being scheduled, not optional.</li>
             <li>Ask about new or worsening symptoms since the last visit — [symptom placeholder].</li>
-            <li>Confirm the best callback number and preferred contact window.</li>
+            <li>Offer to help find a physician appointment time and CT slot within the next 3 months.</li>
           </ul>
         </div>
         <div id="sessVoiceMount"></div>

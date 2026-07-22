@@ -13,7 +13,7 @@ function goalFor(task) {
   const t = (task?.t || '').toLowerCase()
   if (t.includes('clarifying')) {
     return {
-      goal: 'walk the patient through their imaging finding, confirm they understand it needs a closer look (not that it is a diagnosis), ask about any new or worsening symptoms, and confirm the best callback number and preferred contact window',
+      goal: 'walk the patient through their imaging finding and confirm they understand it needs a closer look (not that it is a diagnosis); explain the next step — a physician appointment plus an immediate 3-month follow-up CT scan, and confirm they understand both are being scheduled (not optional); ask about any new or worsening symptoms since the last visit; and offer to help find a physician appointment time and CT slot within the next 3 months',
       begin: true,
     }
   }
