@@ -291,8 +291,9 @@ function assistWorkarea(p,t){
     <div class="draftlabel"><span>Clarifying questions · prepared by Aira</span><span class="muted">read full brief</span></div>
     <ul class="qlist">
       <li>Confirm ${p.n} understands the finding (${p.find}) and that it needs a closer look, not that it's a diagnosis.</li>
+      <li>Explain the next step: a physician appointment plus an immediate 3-month follow-up CT scan — confirm they understand both are being scheduled, not optional.</li>
       <li>Ask about new or worsening symptoms since the last visit — [symptom placeholder].</li>
-      <li>Confirm the best callback number and preferred contact window.</li>
+      <li>Offer to help find a physician appointment time and CT slot within the next 3 months.</li>
     </ul>
     <div class="actions">
       <button class="btn primary" id="btnStartCall">☎ Start call</button>
@@ -471,8 +472,9 @@ function renderSession(){
         <div class="draftlabel"><span>Clarifying questions · prepared by Aira</span></div>
         <ul class="qlist">
           <li>Confirm ${p.n} understands the finding (${p.find}) and that it needs a closer look, not that it's a diagnosis.</li>
+          <li>Explain the next step: a physician appointment plus an immediate 3-month follow-up CT scan — confirm they understand both are being scheduled, not optional.</li>
           <li>Ask about new or worsening symptoms since the last visit — [symptom placeholder].</li>
-          <li>Confirm the best callback number and preferred contact window.</li>
+          <li>Offer to help find a physician appointment time and CT slot within the next 3 months.</li>
         </ul>
         <div class="sess-foot">
           <button class="btn primary" id="btnDial">☎ Start dialing</button>
